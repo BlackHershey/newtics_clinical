@@ -20,7 +20,7 @@ NTID = 'demo_study_id'
 
 RESULT_OUTPUT_FILE = '{}_result.csv'
 
-EXCLUDED = [ 706, 708, 711, 717, 721, 723, 725, 727, 737, 739, 802, 803, 804 ]
+EXCLUDED = [ 'test' ] + [ 'NT' + str(sub) for sub in [706, 708, 711, 717, 721, 723, 725, 727, 737, 739, 802, 803, 804, 784] ]
 ANXIETY_DISORDERS = [ ('pd', 'Panic Disorder'), ('sad', 'Separation Anxiety Disorder'), ('adc', 'Avoidant Disorder of Childhood'),
 	('sp', 'Simple Phobia'), ('socp', 'Social Phobia'), ('agor', 'Agoraphobia'), ('oad', 'Overanxious Disorder'),
 	('gad', 'Generalized Anxiety Disorder') ]
@@ -418,7 +418,7 @@ def score_redcap_data(study_name, nt_file=None, r01_file=None, use_existing=Fals
 	if study_name == 'nt':
 		df = df[df.index.get_level_values(NTID).isin(nt_df.index.get_level_values(NTID))]
 
-	df = df[~df.index.get_level_values(NTID).isin([ 'NT' + str(subject_num) for subject_num in EXCLUDED ])] # remove excluded/control subjects
+	df = df[~df.index.get_level_values(NTID).isin(EXCLUDED) # remove excluded/control subjects
 	df = df[df.index.get_level_values(EVENT_NAME).isin(list(study_vars['event_name_renames'].values()))] # remove rows (prior to calculation) not used in summaries
 
 	# generate smaller dataframes for each subset of question data
