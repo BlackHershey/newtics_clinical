@@ -1,0 +1,33 @@
+{
+    "r01": {
+        "event_name_renames": {
+            "screening_visit": "screen",
+            "12_month_follow_up": "12mo"
+        },
+        "directories": {
+            "base": "C:\\Users\\{}\\Box\\Black_Lab\\projects\\TS\\New Tics R01\\Data",
+            "input": {
+                "DRZ": "{}\\TSP",
+                "CPT": "{}\\CPT",
+                "weather": "{}\\Weather"
+            },
+            "output": "{}\\analysis"
+        }
+    },
+    "nt": {
+        "event_name_renames": {
+            "initial_screen": "screen",
+            "initial_screen_ext": "screen_ext",
+            "one_year_followup": "12mo"
+        },
+        "directories": {
+            "base": "C:\\Users\\{}\\Box\\Black_Lab\\projects\\TS\\NewTics\\Data\\Raw_Data",
+            "input": {
+                "DRZ": "{}\\DRZ",
+                "CPT": "{}\\CPT",
+                "weather": "{}\\weather"
+            },
+            "output": "{}\\..\\analysis"
+        }
+    }
+}

@@ -396,12 +396,15 @@ def determine_days_since_onset(visit_dates, onset_dates):
 
 
 def score_redcap_data(study_name, nt_file=None, r01_file=None, use_existing=False):
-	if use_existing:
-		return pd.read_csv(RESULT_OUTPUT_FILE.format(study_name)).set_index(NTID)
-
 	with open('config.json') as config_file:
 		config = json.load(config_file)
 		study_vars = config[study_name]
+
+	basedir = study_vars['directories']['base'].format(getuser())
+	outdir = study_vars['directories']['output'].format(basedir)
+
+	if use_existing:
+		return pd.read_csv(join(outdir, RESULT_OUTPUT_FILE.format(study_name))).set_index(NTID)
 
 	db_password = None
 	if not nt_file or not r01_file:
@@ -487,8 +490,7 @@ def score_redcap_data(study_name, nt_file=None, r01_file=None, use_existing=Fals
 	result.insert(0, '12mo_complete', result.apply(lambda x: True if not x[twelve_mo_cols].isnull().all() else None, axis=1))
 
 	try:
-		basedir = study_vars['directories']['base'].format(getuser())
-		result.to_csv(join(study_vars['directories']['output'].format(basedir), RESULT_OUTPUT_FILE.format(study_name)))
+		result.to_csv(outdir, RESULT_OUTPUT_FILE.format(study_name))
 		return result
 	except PermissionError:
 		raise Exception("Unable to write to output file because it is currently open. Please close it and try again.")
