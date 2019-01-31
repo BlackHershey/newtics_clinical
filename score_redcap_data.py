@@ -25,7 +25,7 @@ ANXIETY_DISORDERS = [ ('pd', 'Panic Disorder'), ('sad', 'Separation Anxiety Diso
 	('sp', 'Simple Phobia'), ('socp', 'Social Phobia'), ('agor', 'Agoraphobia'), ('oad', 'Overanxious Disorder'),
 	('gad', 'Generalized Anxiety Disorder') ]
 
-DB_PATH_TEMPLATE = r'C:\Users\{}\Box\Black_Lab\projects\TS\NewTics\Data\analysis\clinical_data\scripts\api_tokens.accdb'
+DB_PATH_TEMPLATE = r'C:\Users\{}\Box\Black_Lab\projects\TS\NewTics\Data\REDCap\api_tokens.accdb'
 URL = 'https://redcap.wustl.edu/redcap/srvrs/prod_v3_1_0_001/redcap/api/'
 
 ALPHA_ONLY = re.compile('([^\sa-zA-Z]|_)+')
@@ -286,9 +286,9 @@ def get_ksads_diagnoses(row, data_dict):
 	diagnoses = []
 	for var in diagnosed_vars:
 		label = ALPHA_ONLY.sub('', BeautifulSoup(data_dict[data_dict['Variable / Field Name'] == var].iloc[0]['Field Label'], 'lxml')
-			.get_text()).rsplit(' ', 2)[0].strip() # find label in data dict, strip out html tags/other special character, get rid of episode string
-		if var.endswith('prev') or var.endswith('msp'):
-			label += '(Past)' # add back past designation for previous episode (otherwise, current episode is assumed)
+			.get_text()).rsplit(' ', 2)[0].replace('Diagnosis', '').strip() # find label in data dict, strip out html tags/other special character, get rid of episode string
+		if var.endswith('prev_ep') or var.endswith('msp'):
+			label += ' (Past)' # add back past designation for previous episode (otherwise, current episode is assumed)
 		diagnoses.append(label)
 	return '; '.join(diagnoses)
 
@@ -490,7 +490,7 @@ def score_redcap_data(study_name, nt_file=None, r01_file=None, use_existing=Fals
 	result.insert(0, '12mo_complete', result.apply(lambda x: True if not x[twelve_mo_cols].isnull().all() else None, axis=1))
 
 	try:
-		result.to_csv(outdir, RESULT_OUTPUT_FILE.format(study_name))
+		result.to_csv(join(outdir, RESULT_OUTPUT_FILE.format(study_name)))
 		return result
 	except PermissionError:
 		raise Exception("Unable to write to output file because it is currently open. Please close it and try again.")
