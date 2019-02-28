@@ -21,9 +21,9 @@ NTID = 'demo_study_id'
 RESULT_OUTPUT_FILE = '{}_result.csv'
 
 EXCLUDED = [ 'test' ] + [ 'NT' + str(sub) for sub in [706, 708, 711, 717, 721, 723, 725, 727, 737, 739, 802, 803, 804, 784] ]
-ANXIETY_DISORDERS = [ ('pd', 'Panic Disorder'), ('sad', 'Separation Anxiety Disorder'), ('adc', 'Avoidant Disorder of Childhood'),
-	('sp', 'Simple Phobia'), ('socp', 'Social Phobia'), ('agor', 'Agoraphobia'), ('oad', 'Overanxious Disorder'),
-	('gad', 'Generalized Anxiety Disorder') ]
+ANXIETY_DISORDERS = [ ('pd', 'panic', 'Panic Disorder'), ('sad', 'sepanxiety', 'Separation Anxiety Disorder'),
+	('adc', None, 'Avoidant Disorder of Childhood'), ('sp', 'specphobia', 'Simple Phobia'), ('socp', None, 'Social Phobia'),
+	('agor', 'agoraphobia', 'Agoraphobia'), ('oad', None, 'Overanxious Disorder'), ('gad', None, 'Generalized Anxiety Disorder') ]
 
 DB_PATH_TEMPLATE = r'C:\Users\{}\Box\Black_Lab\projects\TS\NewTics\Data\REDCap\api_tokens.accdb'
 URL = 'https://redcap.wustl.edu/redcap/srvrs/prod_v3_1_0_001/redcap/api/'
@@ -294,28 +294,32 @@ def get_ksads_diagnoses(row, data_dict):
 
 
 def score_ksads(ksads_df):
-	prev_cur_ep_columns = get_matching_columns(ksads_df.columns, 'ksads_[a-z]+_(prev|cur)_ep$')
-	ce_msp_columns = get_matching_columns(ksads_df.columns, 'ksads5_[a-z]+_(ce|msp)$')
-
-	named_disorders = ['add', 'ocd'] + [ tup[0] for tup in ANXIETY_DISORDERS ]
-	named_disorder_columns = [ '_'.join(['ksads', a, b]) for a, b in list(product(named_disorders, ['prev_ep', 'cur_ep', 'ce', 'msp'])) ]
+	prev_cur_ep_columns = get_matching_columns(ksads_df.columns, 'ksads_([a-z]+)_(prev|cur)_ep$')
+	ce_msp_columns = get_matching_columns(ksads_df.columns, 'ksads5_([a-z]+_)+(ce|msp)$')
+	all_episode_columns = prev_cur_ep_columns + ce_msp_columns
 	ksads_df[ce_msp_columns] = ksads_df[ce_msp_columns] + 1 # newer form is 0-4 (3 and 4 techincally should be switched, but both count as diagnosed so it doesn't matter)
-	prev_cur_ep_columns = prev_cur_ep_columns + ce_msp_columns # combine column names now that they are on same scale
-	ksads_df[prev_cur_ep_columns] = ksads_df[prev_cur_ep_columns].replace([1, 2, 3, 4, 5], ['N', 'N', 'N', 'Y', 'Y']) # consider 'definite' and 'partial remission' as diagnosed
+	ksads_df[all_episode_columns] = ksads_df[all_episode_columns].replace([np.nan, 1, 2, 3, 4, 5], ['N', 'N', 'N', 'N', 'Y', 'Y']) # consider 'definite' and 'partial remission' as diagnosed
+
+	adhd_episode_cols = [ col for col in all_episode_columns if re.search('_(add|adhd)_', col) ]
+	ocd_episode_cols = [ col for col in all_episode_columns if re.search('_ocd_', col) ]
+	anx_search_options = '|'.join([ d for d in sum([tup[:-1] for tup in ANXIETY_DISORDERS ], ()) if d is not None ]) # get flattend list of both form versions disorder names
+	anxiety_episode_cols = [ col for col in all_episode_columns if re.search('_(' + anx_search_options + '_)', col) ]
+	named_disorder_columns = adhd_episode_cols + ocd_episode_cols + anxiety_episode_cols
 
 	data_dict_df = pd.concat([
 		pd.read_csv(r'C:\Users\{}\Box\Black_Lab\projects\TS\NewTics\Data\REDCap\NewTics_DataDictionary_2016-03-08.csv'.format(getuser())),
 		pd.read_csv(r'C:\Users\{}\Box\Black_Lab\projects\TS\New Tics R01\Data\REDCap\NewTicsR01_DataDictionary_2018-11-09.csv'.format(getuser()))
 	])
-	ksads_df['ksads_diagnoses'] = ksads_df[prev_cur_ep_columns].apply(get_ksads_diagnoses, args=(data_dict_df,), axis=1)
+	ksads_df['ksads_all_diagnoses'] = ksads_df[all_episode_columns].apply(get_ksads_diagnoses, args=(data_dict_df,), axis=1)
+	ksads_df['ksads_anxiety_diagnoses'] = ksads_df[anxiety_episode_cols].apply(get_ksads_diagnoses, args=(data_dict_df,), axis=1)
 
-	tic_columns = get_matching_columns(prev_cur_ep_columns, 'ksads\w*_(ts|cmvtd|ttd)_\w*')
-	ksads_df = ever_had('adhd_ever', ksads_df, named_disorder_columns[:2])
-	ksads_df = ever_had('ocd_ever', ksads_df, named_disorder_columns[2:4])
-	ksads_df = ever_had('other_anxiety_disorder_ever', ksads_df, named_disorder_columns[4:])
-	ksads_df = ever_had('other_ksads_ever', ksads_df, [ col for col in prev_cur_ep_columns if col not in named_disorder_columns ])
-	ksads_df = ever_had('non_tic_ksads_ever', ksads_df, [ col for col in prev_cur_ep_columns if col not in tic_columns ])
-	return ksads_df[['adhd_ever', 'ocd_ever', 'other_anxiety_disorder_ever', 'other_ksads_ever', 'non_tic_ksads_ever', 'ksads_diagnoses']]
+	tic_columns = get_matching_columns(all_episode_columns, 'ksads\w*_(ts|cmvtd|ttd)_\w*')
+	ksads_df = ever_had('adhd_ever', ksads_df, adhd_episode_cols)
+	ksads_df = ever_had('ocd_ever', ksads_df, ocd_episode_cols)
+	ksads_df = ever_had('other_anxiety_disorder_ever', ksads_df, anxiety_episode_cols)
+	ksads_df = ever_had('other_ksads_ever', ksads_df, [ col for col in all_episode_columns if col not in named_disorder_columns ])
+	ksads_df = ever_had('non_tic_ksads_ever', ksads_df, [ col for col in all_episode_columns if col not in tic_columns ])
+	return ksads_df[['adhd_ever', 'ocd_ever', 'other_anxiety_disorder_ever', 'other_ksads_ever', 'non_tic_ksads_ever', 'ksads_all_diagnoses', 'ksads_anxiety_diagnoses']]
 
 
 def parse_data_dictionary(file):
@@ -418,8 +422,9 @@ def score_redcap_data(study_name, nt_file=None, r01_file=None, use_existing=Fals
 	if study_name == 'nt':
 		df = df[df.index.get_level_values(NTID).isin(nt_df.index.get_level_values(NTID))]
 
-	df = df[~df.index.get_level_values(NTID).isin(EXCLUDED) # remove excluded/control subjects
-	df = df[df.index.get_level_values(EVENT_NAME).isin(list(study_vars['event_name_renames'].values()))] # remove rows (prior to calculation) not used in summaries
+	df = df[~df.index.get_level_values(NTID).isin(EXCLUDED)] # remove excluded/control subjects
+	all_events = list(config['nt']['event_name_renames'].values()) + list(config['r01']['event_name_renames'].values())
+	df = df[df.index.get_level_values(EVENT_NAME).isin(all_events)] # remove rows (prior to calculation) not used in summaries
 
 	# generate smaller dataframes for each subset of question data
 	demo_df = df[get_matching_columns(df.columns, '^demo')].copy()
@@ -465,13 +470,13 @@ def score_redcap_data(study_name, nt_file=None, r01_file=None, use_existing=Fals
 	result.columns = [ '_'.join(map(str,i)) for i in result.columns ]
 	result = result.dropna(axis=1, how='all')
 
-	# now that everything is calculated, flattened and all-null columns are removed, trasnfer screen_ext data to screen when available
-	if has_screen_ext:
-		# puts check is a hacky solution to handle that there will always be non-null PUTS columns when row is empty
-		# 	- safe to do, since PUTS has never happened in a screen_ext visit
-		ext_cols = [ col for col in result.columns if col.endswith('_ext') and 'puts' not in col ]
-		result.loc[extra_screen_ids] = result.loc[extra_screen_ids].apply(apply_extra_screen_data, args=(ext_cols,), axis=1)
-		result = result.drop(ext_cols, axis=1) # remove inital screen columns after data has been copied over
+	# # now that everything is calculated, flattened and all-null columns are removed, trasnfer screen_ext data to screen when available
+	# if has_screen_ext:
+	# 	# puts check is a hacky solution to handle that there will always be non-null PUTS columns when row is empty
+	# 	# 	- safe to do, since PUTS has never happened in a screen_ext visit
+	# 	ext_cols = [ col for col in result.columns if col.endswith('_ext') and 'puts' not in col ]
+	# 	result.loc[extra_screen_ids] = result.loc[extra_screen_ids].apply(apply_extra_screen_data, args=(ext_cols,), axis=1)
+	# 	result = result.drop(ext_cols, axis=1) # remove inital screen columns after data has been copied over
 
 	# get all screen rows of original df (and drop event name from index)
 	# 	will be used to calculate things relevant to screen only in flattened df
