@@ -35,7 +35,7 @@ def generate_formatted_table(study_name, nt_file, r01_file, check_missing, use_e
     if study_name == 'r01':
         nt_indir = { k: v.format(config['nt']['directories']['base'].format(getuser())) for k,v in config['nt']['directories']['input'].items() }
         cpt_df = concat_df(cpt_df, extract_cpt(nt_indir['CPT'], use_existing=use_existing))
-        drz_df = concat_df(drz_df, score_drz(nt_indir['DRZ'], use_existing=use_existing))
+        drz_df = drz_df.combine_first(score_drz(nt_indir['DRZ'], use_existing=use_existing))
         weather_df = concat_df(weather_df, score_weather(nt_indir['weather'], use_existing=use_existing))
 
     df = redcap_df.join(cpt_df, how='left')

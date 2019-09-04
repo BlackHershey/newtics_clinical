@@ -14,6 +14,7 @@ from getpass import getpass, getuser
 from itertools import product
 from os.path import join
 from redcap import Project, RedcapError
+from sys import stderr, exit
 
 EVENT_NAME = 'event_name'
 NTID = 'demo_study_id'
@@ -40,8 +41,7 @@ def get_redcap_project(study_name, password):
 		)
 		conn = pyodbc.connect(conn_str)
 	except pyodbc.Error:
-		stderr.write('Error connecting to access database')
-		exit(1)
+		exit('Error connecting to access database')
 
 	cursor = conn.cursor()
 	sql = 'SELECT {}_token FROM api_tokens WHERE user_id = ?'.format(study_name)
@@ -302,7 +302,7 @@ def score_ksads(ksads_df):
 
 	adhd_episode_cols = [ col for col in all_episode_columns if re.search('_(add|adhd)_', col) ]
 	ocd_episode_cols = [ col for col in all_episode_columns if re.search('_ocd_', col) ]
-	anx_search_options = '|'.join([ d for d in sum([tup[:-1] for tup in ANXIETY_DISORDERS ], ()) if d is not None ]) # get flattend list of both form versions disorder names
+	anx_search_options = '|'.join([ d for d in sum([tup[:-1] for tup in ANXIETY_DISORDERS ], ()) if d is not None ]) # get flattend list of both form versions disorder names (https://stackoverflow.com/a/10636583)
 	anxiety_episode_cols = [ col for col in all_episode_columns if re.search('_(' + anx_search_options + '_)', col) ]
 	named_disorder_columns = adhd_episode_cols + ocd_episode_cols + anxiety_episode_cols
 
