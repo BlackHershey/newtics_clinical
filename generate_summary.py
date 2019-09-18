@@ -1,9 +1,9 @@
-import argparse
 import json
 import numpy as np
 import pandas as pd
 
 from extract_cpt import extract_cpt
+from gooey import Gooey, GooeyParser
 from score_drz import score_drz
 from score_redcap_data import score_redcap_data
 from score_weather import score_weather
@@ -17,7 +17,7 @@ MISSING_FILE_TEMPLATE = '{}_all_data_missing{}.{}'
 def concat_df(study_df, other_df):
     return pd.concat([other_df, study_df])
 
-def generate_formatted_table(study_name, nt_file, r01_file, check_missing, use_existing):
+def generate_formatted_table(study_name, api_db_pw, nt_file, r01_file, check_missing, use_existing):
     with open('config.json') as config_file:
         config = json.load(config_file)
         study_vars = config[study_name]
@@ -27,7 +27,7 @@ def generate_formatted_table(study_name, nt_file, r01_file, check_missing, use_e
     outdir = study_vars['directories']['output'].format(basedir)
 
     # get dfs for all data sources
-    redcap_df = score_redcap_data(study_name, nt_file, r01_file, use_existing=use_existing)
+    redcap_df = score_redcap_data(study_name, api_db_pw, nt_file, r01_file, use_existing=use_existing)
     cpt_df = extract_cpt(indir['CPT'], use_existing=use_existing)
     drz_df = score_drz(indir['DRZ'], use_existing=use_existing)
     weather_df = score_weather(indir['weather'], use_existing=use_existing)
@@ -125,13 +125,18 @@ def generate_demographic_summary(study_name, df = None, check_missing=False):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='combine data from all sources (redcap, drz, cpt, weather) to generate summary')
-    parser.add_argument('study_name', choices=['nt','r01'], help='which project to summarize data for')
-    parser.add_argument('--nt_file', help='file containing data exported from NewTics redcap project (if unspecified API will be used)')
-    parser.add_argument('--r01_file', help='file containing data exported from R01 redcap project (if unspecified API will be used)')
-    parser.add_argument('--check', action='store_true', help='check for missing/extra data and output anomalies to file (default is not to check)')
-    parser.add_argument('--use_existing', action='store_true', help='use existing redcap/drz/cpt/weather output files (default is to recalculate them)')
-    args = parser.parse_args()
+    @Gooey()
+    def parse_args():
+        parser = GooeyParser(description='combine data from all sources (redcap, drz, cpt, weather) to generate summary')
+        parser.add_argument('study_name', choices=['nt','r01'], help='which project to summarize data for')
+        parser.add_argument('--api_db_password', widget='PasswordField')
+        parser.add_argument('--nt_file', widget='FileChooser', help='file containing data exported from NewTics redcap\nproject (if unspecified API will be used)')
+        parser.add_argument('--r01_file', widget='FileChooser', help='file containing data exportedfrom R01 redcap\nproject (if unspecified API will be used)')
+        parser.add_argument('--check', action='store_true', help='check for missing/extra data and output\nanomalies to file (default is not to check)')
+        parser.add_argument('--use_existing', action='store_true', help='use existing redcap/drz/cpt/weather\noutput files (default is to recalculate them)')
+        return parser.parse_args()
 
-    df = generate_formatted_table(args.study_name, args.nt_file, args.r01_file, args.check, args.use_existing)
+
+    args = parse_args()
+    df = generate_formatted_table(args.study_name, args.api_db_password, args.nt_file, args.r01_file, args.check, args.use_existing)
     generate_demographic_summary(args.study_name, df)

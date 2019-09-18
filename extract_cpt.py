@@ -81,13 +81,14 @@ def extract_cpt(indir=CPT_DIRECTORY, use_existing=False):
 
 	return df[summary_columns]
 
-@Gooey
-def parse_args():
-	parser = GooeyParser()
-	parser.add_argument('indir', widget='DirChooser', help='directory containing weather txt files')
-	return parser.parse_args()
-
 
 if __name__ == '__main__':
+	@Gooey
+	def parse_args():
+		parser = GooeyParser()
+		parser.add_argument('indir', widget='DirChooser', help='directory containing cpt excel files')
+		return parser.parse_args()
+
+		
 	args = parse_args()
 	extract_cpt(args.indir)

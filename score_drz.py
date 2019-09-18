@@ -1,4 +1,3 @@
-import argparse
 import csv
 import itertools
 import numpy as np
@@ -7,6 +6,7 @@ import pandas as pd
 
 from datetime import datetime, time, timedelta
 from glob import glob
+from gooey import Gooey, GooeyParser
 from os import getcwd, listdir
 from os.path import join, basename
 
@@ -164,13 +164,22 @@ def score_drz(indir, filename_format=DEFAULT_FILENAME_FORMAT, nested=False, use_
 
 if __name__ == '__main__':
 	# set up expected arguments and associated help text
-	parser = argparse.ArgumentParser(description='parses and scores drz files')
-	parser.add_argument('indir', help='directory containing drz txt files')
-	parser.add_argument('--filename_format', default=DEFAULT_FILENAME_FORMAT, help='regex for matching filenames in indir')
-	parser.add_argument('-r', '--reuse', action='store_true', help='reuse the output file from previous run (default is to parse again)')
-	parser.add_argument('--check', action='store_true', help='check for missing/extra data and output anomalies to file (default is not to check)')
-	parser.add_argument('--nested', action='store_true', help='if indir has log files nested in subject directories')
-	args = parser.parse_args()
+	@Gooey()
+	def parse_args():
+		parser = GooeyParser(description='parses and scores drz files')
+
+		required = parser.add_argument_group('Required Arguments', gooey_options={'columns':1})
+		required.add_argument('--indir', widget='DirChooser', required=True, help='directory containing drz txt files')
+
+		optional = parser.add_argument_group('Optional Arguments', gooey_options={'columns':1})
+		optional.add_argument('--filename_format', default=DEFAULT_FILENAME_FORMAT, help='regex for matching filenames in indir')
+		optional.add_argument('-r', '--reuse', action='store_true', help='reuse the output file from previous run (default is to parse again)')
+		optional.add_argument('--check', action='store_true', help='check for missing/extra data and output anomalies to file (default is not to check)')
+		optional.add_argument('--nested', action='store_true', help='if indir has log files nested in subject directories')
+		return parser.parse_args()
+
+
+	args = parse_args()
 	print(args)
 
 	score_drz(args.indir, args.filename_format, args.nested, args.reuse, args.check)

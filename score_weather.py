@@ -119,13 +119,14 @@ def score_weather(dir=WEATHER_DIRECTORY, use_existing=False):
 	df.to_csv(join(dir, OUTPUT_FILE))
 	return df[summary_cols]
 
-@Gooey
-def parse_args():
-	parser = GooeyParser()
-	parser.add_argument('indir', widget='DirChooser', help='directory containing weather txt files')
-	return parser.parse_args()
-
 
 if __name__ == '__main__':
+	@Gooey
+	def parse_args():
+		parser = GooeyParser()
+		parser.add_argument('indir', widget='DirChooser', help='directory containing weather txt files')
+		return parser.parse_args()
+
+
 	args = parse_args()
 	score_weather(args.indir)

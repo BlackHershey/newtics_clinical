@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-import argparse
 import csv
 import datefinder
 import json
@@ -11,6 +10,7 @@ import re
 from bs4 import BeautifulSoup
 from datetime import datetime
 from getpass import getpass, getuser
+from gooey import Gooey, GooeyParser
 from itertools import product
 from os.path import join
 from redcap import Project, RedcapError
@@ -399,7 +399,7 @@ def determine_days_since_onset(visit_dates, onset_dates):
 	return pd.to_numeric((visit_dates - onset_dates).apply(lambda x: x.days), errors='coerce')
 
 
-def score_redcap_data(study_name, nt_file=None, r01_file=None, use_existing=False):
+def score_redcap_data(study_name, api_db_password=None, nt_file=None, r01_file=None, use_existing=False):
 	with open('config.json') as config_file:
 		config = json.load(config_file)
 		study_vars = config[study_name]
@@ -413,7 +413,7 @@ def score_redcap_data(study_name, nt_file=None, r01_file=None, use_existing=Fals
 	db_password = None
 	if not nt_file or not r01_file:
 		print('No file specified for study - using API instead...')
-		db_password = getpass('API token db password: ')
+		db_password = api_db_password
 
 	nt_df = get_dataframe_from_api('nt', config['nt'], db_password) if not nt_file else get_dataframe_from_file(nt_file, config['nt'])
 	r01_df = get_dataframe_from_api('r01', config['r01'], db_password) if not r01_file else get_dataframe_from_file(r01_file,  config['r01'])
@@ -502,11 +502,18 @@ def score_redcap_data(study_name, nt_file=None, r01_file=None, use_existing=Fals
 
 
 if __name__ == '__main__':
-	parser = argparse.ArgumentParser(description='Score redcap data (from export file)')
-	parser.add_argument('study', choices=['nt', 'r01'], help='which project to structure data for')
-	parser.add_argument('--nt_file', help='file containing data exported from NewTics redcap project (if unspecified API will be used)')
-	parser.add_argument('--r01_file', help='file containing data exported from R01 redcap project (if unspecified API will be used)')
-	parser.add_argument('--use_existing', action='store_true', help='use existing result file to return data (default is to rescore)')
-	args = parser.parse_args()
+	@Gooey()
+	def parse_args():
+		parser = GooeyParser(description='Score redcap data (from export file)')
+		required = parser.add_argument_group('Required Arguments')
+		required.add_argument('--study', required=True, choices=['nt', 'r01'], help='which project to structure data for')
 
-	score_redcap_data(args.study, args.nt_file, args.r01_file)
+		input = parser.add_argument_group('Data Input Options', gooey_options={'columns':1})
+		input.add_argument('--api_db_password', widget='PasswordField')
+		input.add_argument('--nt_file', widget='FileChooser', help='file containing data exported from NewTics redcap project (if unspecified API will be used)')
+		input.add_argument('--r01_file', widget='FileChooser', help='file containing data exported from R01 redcap project (if unspecified API will be used)')
+
+		return parser.parse_args()
+
+	args = parse_args()
+	score_redcap_data(args.study, args.api_db_password, args.nt_file, args.r01_file)
