@@ -1,4 +1,3 @@
-import argparse
 import csv
 import numpy as np
 import pandas as pd
@@ -6,10 +5,10 @@ import re
 import win32com.client
 import sys
 
-
 from datetime import datetime
 from enum import Enum
 from getpass import getuser, getpass
+from gooey import Gooey, GooeyParser
 from itertools import chain
 from os.path import exists, join
 
@@ -242,6 +241,16 @@ def fill_known_missing(form_df, form):
     return form_df
 
 
+def replace_staff_names(all_data_df):
+    # replace study staff/doctor names with generic references
+    subset = [ col for col in all_data_df.columns if col != 'subjectkey']
+    all_data_df[subset] = all_data_df[subset].replace({
+        '(Emily|Emily Bihun|ECB|Vicki|Vicki Martin|VM|Soyoung|Soyoung Kim|SK|Kevin|Kevin Black|KJB|Samantha|Samantha Ranck|SR|Mary|Jackie|Jackie Hampton|JH)': 'rater',
+        '(Dr. ([A-Z][a-z]+){1,2})': 'doctor'
+    }, regex=True)
+    return all_data_df
+
+
 def get_redcap_df(guid_df, fields=None):
     api_db_password = getpass('API db password:')
     r01_project = get_redcap_project('r01', api_db_password)
@@ -294,11 +303,7 @@ def convert_redcap_to_nih(form_mapping_key, data_dict=None, convert_forms=None, 
         all_data_df =  replace_checkbox_with_label(all_data_df, data_dict_df, field, use_label)
 
     # replace study staff/doctor names with generic references
-    subset = [ col for col in all_data_df.columns if col != 'subjectkey']
-    all_data_df[subset] = all_data_df[subset].replace({
-        '(Emily|Emily Bihun|ECB|Vicki|Vicki Martin|VM|Soyoung|Soyoung Kim|SK|Kevin|Kevin Black|KJB|Samantha|Samantha Ranck|SR)': 'rater',
-        '(Dr. ([A-Z][a-z]+){1,2})': 'doctor'
-    }, regex=True)
+    all_data_df = replace_staff_names(all_data_df)
 
     form_field_map = {
         'ndar_subject01': ['incl_excl_grp', 'demo_race'],
@@ -611,12 +616,19 @@ def convert_redcap_to_nih(form_mapping_key, data_dict=None, convert_forms=None, 
     return
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('form_mapping_key', help='NIH form mapping key excel file')
-    parser.add_argument('--data_dictionary', help='most recent REDCap data dictionary')
-    parser.add_argument('-f', '--form', nargs='+', help='NIH form(s) to convert (default is all)')
-    parser.add_argument('--to_date', type=lambda d: datetime.strptime(d, '%m/%d/%Y'), help='only process subjects up until date')
-    args = parser.parse_args()
+@Gooey()
+def parse_args():
+    parser = GooeyParser()
+    required = parser.add_argument_group('Required Arguments')
+    required.add_argument('--form_mapping_key', required=True, widget='FileChooser', help='NIH form mapping key excel file')
 
+    optional = parser.add_argument_group('Optional Arguments')
+    optional.add_argument('--data_dictionary', widget='FileChooser', help='most recent REDCap data dictionary')
+    optional.add_argument('-f', '--form', nargs='+', help='NIH form(s) to convert (default is all)')
+    optional.add_argument('--to_date', widget='DateChooser', type=lambda d: datetime.strptime(d, '%Y-%m-%d'), help='only process subjects up until date')
+    return parser.parse_args()
+
+
+if __name__ == '__main__':
+    args = parse_args()
     convert_redcap_to_nih(args.form_mapping_key, args.data_dictionary, args.form, args.to_date)
