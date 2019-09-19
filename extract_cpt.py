@@ -2,7 +2,6 @@ import csv
 import itertools
 import re
 import pandas as pd
-from excel2CSV import excel_to_csv
 from gooey import Gooey, GooeyParser
 from os import listdir
 from os.path import isfile, join, splitext
@@ -24,7 +23,7 @@ def extract_cpt(indir=CPT_DIRECTORY, use_existing=False):
 	all_measures = [ s.lower().replace('.', '').replace(' ', '_') for s in all_measures ]
 	attributes = [ 'n', 't', 'pctile', 'guideline', 'pct' ]
 	#columns = ['demo_study_id' , 'cpt_type'] + [ 'cpt_' + '_'.join([a,b]) for a, b in list(itertools.product(all_measures, attributes)) ]
-	columns = ['demo_study_id'] + [ 'cpt_' + '_'.join([a,b]) for a, b in list(itertools.product(all_measures, attributes)) ]
+	columns = ['demo_study_id', 'cpt_type'] + [ 'cpt_' + '_'.join([a,b]) for a, b in list(itertools.product(all_measures, attributes)) ]
 
 	attributes.remove('guideline')
 	summary_columns = [ col for col in columns if re.match('cpt_(omissions|commissions|hit_rt)_(' + '|'.join(attributes) + ')', col) ]
@@ -33,45 +32,37 @@ def extract_cpt(indir=CPT_DIRECTORY, use_existing=False):
 	if use_existing:
 		return pd.read_csv(join(indir, OUTPUT_FILE)).set_index(INDEX_COLS)[summary_columns]
 
-	filename_format = 'NT\d{3}_K{0,1}CPT\w*' # matches files beginning with NT<id>_KCPT and NT<id>_CPT
-	all_files = [ f for f in listdir(indir) if re.match(filename_format, f, flags=re.IGNORECASE) ]
-	excel_files = [ f for f in all_files if f.endswith('.xls') ]
+	filename_format = '((NT\d{3})_(K?CPT)\w*.xlsx?)' # matches files beginning with NT<id>_KCPT and NT<id>_CPT
+	search_res = [ re.match(filename_format, f, flags=re.IGNORECASE) for f in listdir(indir) ]
+	excel_files = [ s.groups() for s in search_res if s ]
 
 	results = [] # array of arrays of CPT omission/commission/hit rt data for each subject
-	for excel_file in excel_files:
-		if excel_file.startswith("NT"):
-			root, ext = splitext(excel_file)
-			f = root + '.csv'
-			if f not in all_files:
-				print('No csv file: {}. Converting excel to csv...'.format(f))
-				excel_to_csv(join(indir, excel_file), join(indir, f))
+	for (filename, subject, cpt_type) in excel_files:
+		print('Extracting', filename)
+		file_contents = pd.read_excel(join(indir, filename)).values.tolist()
 
-			print('Extracting', f)
+		cpt_type = cpt_type.upper()
+		if cpt_type == 'CPT':
+			cpt_type += '-II'
 
-			# change to 'rb' for python 2.x
-			with open(join(indir, f), 'r') as datafile:
-				assert f[0:2] == "NT", "ERROR, this file isn't an NT__*.xls file: "+f+". "+f[0:2]
-				subject = f[0:5]
-				cpt_type = root.split('_')[1] # grab cpt or kcpt from file name
-				cpt_type = cpt_type + '-II' if len(cpt_type) == 3 else cpt_type
+		one_more = False
+		result_row = [subject, cpt_type]
+		for row in file_contents:
+			row = [ str(x) for x in row ]
+			if one_more: # then next line should be %
 				one_more = False
-				result_row = [subject] #, cpt_type]
-				reader = csv.reader(datafile, dialect='excel')
-				for row in reader:
-					if one_more: # then next line should be %
-						one_more = False
-						result_row.append(row[1])
-						continue
-					if row and any(row[0].startswith(measure) for measure in measures_with_pct):
-						result_row += row[1:5]
-						one_more = True
-					elif row and any(row[0].startswith(measure) for measure in measures_without_pct):
-						result_row += row[1:5]
-						result_row.append(None)
+				result_row.append(row[1])
+				continue
+			if row and any(row[0].startswith(measure) for measure in measures_with_pct):
+				result_row += row[1:5]
+				one_more = True
+			elif row and any(row[0].startswith(measure) for measure in measures_without_pct):
+				result_row += row[1:5]
+				result_row.append(None)
 
-					if 'Summary of Inattention Measures' in row:
-						break
-				results.append(result_row)
+			if 'Summary of Inattention Measures' in row:
+				break
+		results.append(result_row)
 
 	df = pd.DataFrame(data = results, columns = columns).set_index(INDEX_COLS)
 	df = df.dropna(axis=1, how='all') # drop columns that are all NaN measues that don't apply to all labels
@@ -89,6 +80,6 @@ if __name__ == '__main__':
 		parser.add_argument('indir', widget='DirChooser', help='directory containing cpt excel files')
 		return parser.parse_args()
 
-		
+
 	args = parse_args()
 	extract_cpt(args.indir)
