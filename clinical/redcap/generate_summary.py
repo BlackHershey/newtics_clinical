@@ -67,7 +67,7 @@ def generate_demographic_summary(study_name, df = None, check_missing=False):
     basedir = study_vars['directories']['base'].format(getuser())
     writer = pd.ExcelWriter(join(study_vars['directories']['output'].format(basedir), '{}_summary.xlsx'.format(study_name)))
 
-    columns = [ 'sex_screen', 'non_white_screen', 'age_screen', '12mo_complete', 'kbit_iq_screen', 'days_since_onset', 'ygtss_past_week_expert_total_tic',
+    columns = [ 'sex_screen', 'non_white_screen', 'age_screen', 'kbit_iq_screen', 'days_since_onset', 'ygtss_past_week_expert_total_tic',
         'ygtss_past_week_expert_m_total', 'ygtss_past_week_expert_p_total', 'ygtss_past_week_expert_total_impairment', 'ygtss_minimal_impairment', 'puts_total', 'puts_total_completed_only',
         'dci_total', 'dci_attempts_to_suppress_tics_ever', 'expert_diagnosis_awareness_ever', 'cybocs_past_week_expert_total', 'adhd_current_expert_total', 'srs_tscore_screen', 'ses_avg_screen', 'vocal_tics_ever',
         'complex_tics_ever', 'adhd_ever_screen', 'ocd_ever_screen', 'other_anxiety_disorder_ever_screen', 'other_ksads_ever_screen', 'non_tic_ksads_ever_screen',
@@ -77,50 +77,62 @@ def generate_demographic_summary(study_name, df = None, check_missing=False):
     columns_12mo_only = ['ygtss_total_tic_delta'] + [ '_'.join(['expert_diagnosis', dx, '12mo']) for dx in ['tourette', 'chronic_tics', 'transient'] ] \
         + [ col for col in df.columns if col.startswith('outcome') and col.endswith('12mo')]
 
-    visits = [ 'screen', '12mo']
-    for visit in visits:
-        if visit == '12mo':
-            df = df[df['12mo_complete'] == True]
-            columns += columns_12mo_only
-            columns.remove('12mo_complete')
+    if 'group_screen' not in df.columns:
+        df['group_screen'] = 'all'
+    groups = df['group_screen'].dropna().unique()
 
-        rows = []
-        for col in columns:
-            col = col if col in df.columns else '_'.join([col, visit])
-            if col not in df.columns:
-                print('Missing column:', col)
-                continue
-            if df[col].isnull().all():
-                print('No data for measure:', col)
-                continue
-
-            if np.issubdtype(df[col].dtype, np.number):
-                mean = df[col].mean(axis=0)
-                std = df[col].std(axis=0)
-                range_str = '-'.join(['{}'.format(int(num)) if int(num) == num else '{:.2f}'.format(num) for num in [df[col].min(), df[col].max()] ])
-                row = [col, '{:.2f} ({:.2f}), {}'.format(mean, std, range_str), df[col].count()]
+    for group in groups:
+        grp_df = df[df['group_screen'] == group]
+        visits = [ 'screen', '12mo']
+        for visit in visits:
+            if visit == '12mo':
+                grp_df = grp_df[grp_df['12mo_complete'] == True]
+                process_cols = columns + columns_12mo_only
             else:
-                row = [ col ]
-                counts = df[col].value_counts().to_dict()
-                n = df[col].count()
+                process_cols = columns
 
-                keys = list(counts.keys())
-                if True in keys or 'Y' in keys:
-                    pct_count = counts[True] if True in keys else counts['Y']
-                    pct = 100 * (float(pct_count) / n)
-                    row.append('{} ({:.2f}%)'.format(pct_count, pct))
+            rows = []
+            for col in process_cols:
+                col = col if col in grp_df.columns else '_'.join([col, visit])
+                if col not in grp_df.columns:
+                    print('Missing column:', col)
+                    continue
+                if grp_df[col].isnull().all():
+                    print('No data for measure:', col)
+                    continue
+
+                if np.issubdtype(grp_df[col].dtype, np.number):
+                    mean = grp_df[col].mean(axis=0)
+                    std = grp_df[col].std(axis=0)
+                    range_str = '-'.join(['{}'.format(int(num)) if int(num) == num else '{:.2f}'.format(num) for num in [grp_df[col].min(), grp_df[col].max()] ])
+                    row = [col, '{:.2f} ({:.2f}), {}'.format(mean, std, range_str), grp_df[col].count()]
                 else:
-                    count_str = '{} {}'.format(counts[keys[0]], keys[0])
-                    if len(keys) > 1:
-                        count_str += ' / {} {}'.format(counts[keys[1]], keys[1])
-                    row.append(count_str)
-                row.append(n)
-            rows.append(row)
+                    row = [ col ]
+                    counts = grp_df[col].value_counts().to_dict()
+                    n = grp_df[col].count()
 
-        summary_columns = ['Descriptor', 'Summary', 'N']
-        summary_df = pd.DataFrame(data = rows, columns = summary_columns)
-        print(summary_df)
-        summary_df.to_excel(writer, sheet_name=visit)
+                    keys = list(counts.keys())
+                    if True in keys or 'Y' in keys:
+                        pct_count = counts[True] if True in keys else counts['Y']
+                        pct = 100 * (float(pct_count) / n)
+                        row.append('{} ({:.2f}%)'.format(pct_count, pct))
+                    else:
+                        if len(keys) > 2:
+                            continue # skip free text columns
+
+                        # handle categorical variables
+                        count_str = '{} {}'.format(counts[keys[0]], keys[0])
+                        if len(keys) > 1:
+                            count_str += ' / {} {}'.format(counts[keys[1]], keys[1])
+                        row.append(count_str)
+                    row.append(n)
+                rows.append(row)
+
+            summary_columns = ['Descriptor', 'Summary', 'N']
+            summary_df = pd.DataFrame(data = rows, columns = summary_columns)
+            print(summary_df)
+            summary_df.to_excel(writer, sheet_name='{}_{}'.format(group, visit))
+
     writer.save()
 
 
@@ -129,9 +141,9 @@ if __name__ == '__main__':
     def parse_args():
         parser = GooeyParser(description='combine data from all sources (redcap, drz, cpt, weather) to generate summary')
         parser.add_argument('study_name', choices=['nt','r01'], help='which project to summarize data for')
-        parser.add_argument('--api_db_password', widget='PasswordField')
         parser.add_argument('--nt_file', widget='FileChooser', help='file containing data exported from NewTics redcap\nproject (if unspecified API will be used)')
         parser.add_argument('--r01_file', widget='FileChooser', help='file containing data exportedfrom R01 redcap\nproject (if unspecified API will be used)')
+        parser.add_argument('--api_db_password', widget='PasswordField')
         parser.add_argument('--check', action='store_true', help='check for missing/extra data and output\nanomalies to file (default is not to check)')
         parser.add_argument('--use_existing', action='store_true', help='use existing redcap/drz/cpt/weather\noutput files (default is to recalculate them)')
         return parser.parse_args()

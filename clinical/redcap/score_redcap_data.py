@@ -416,6 +416,7 @@ def score_redcap_data(study_name, api_db_password=None, nt_file=None, r01_file=N
 		db_password = api_db_password
 
 	nt_df = get_dataframe_from_api('nt', config['nt'], db_password) if not nt_file else get_dataframe_from_file(nt_file, config['nt'])
+	nt_df['incl_excl_grp'] = 'NT'
 	r01_df = get_dataframe_from_api('r01', config['r01'], db_password) if not r01_file else get_dataframe_from_file(r01_file,  config['r01'])
 	df = merge_projects(nt_df, r01_df)
 
@@ -459,7 +460,7 @@ def score_redcap_data(study_name, api_db_password=None, nt_file=None, r01_file=N
 
 	result['kbit_iq'] = df['kbit_iq']
 	result['medications'] = df[get_matching_columns(df.columns, '^med_medication_\d')].apply(lambda x: x.str.cat(sep='; ') if pd.notnull(x).any() else np.nan, axis=1)
-	result['group'] = df['incl_excl_grp'].replace([1,2,3], ['NT', 'TS', 'HC']) if 'incl_excl_grp' in df.columns else 'NT'
+	result['group'] = df['incl_excl_grp'].replace([1,2,3], ['NT', 'TS', 'HC'])
 
 	# store NTIDs of subjects that have intial screen extra data - need later to fill in screen gaps for these subjects
 	has_screen_ext = 'screen_ext' in df.index.get_level_values(EVENT_NAME)
