@@ -10,15 +10,19 @@ from enum import Enum
 from getpass import getuser, getpass
 from gooey import Gooey, GooeyParser
 from itertools import chain
-from os.path import exists, join
+from os.path import dirname, exists, join
 
-sys.path.append(r'C:\Users\{}\Documents\NewTics\newtics_redcap'.format(getuser()))
+
+print(join(dirname(__file__), 'redcap'))
+sys.path.append(join(dirname(dirname(__file__)), 'redcap'))
 from score_redcap_data import get_redcap_project, merge_projects
 
 BASE_PATH = r'C:\Users\{}\Box\Black_lab\projects\TS\New Tics R01\Data'.format(getuser())
+DEFAULT_FORM_MAP = join(dirname(__file__), 'cfg', '2692.MappingKey.xlsx')
 
-
+CONVERSION_DIR = join(BASE_PATH, 'NIH Data Archive', 'conversion')
 GUID_PATH = join(BASE_PATH, r'NIMH GUID\GUIDs.xlsx')
+OUTDIR = join(CONVERSION_DIR, 'import_forms')
 
 WITHHOLD = [ 'incl_excl_ic', 'incl_excl_who', 'incl_excl_new_tics_grp', 'share_data_permission', 'share_data_comments',
     'r01_survey_consent', 'demo_dob', 'childs_age', 'incl_excl_fon_scrn', 'dna_sample_lab_id', 'cbcl_birthdate', 'mo3fupc_who',
@@ -152,13 +156,12 @@ def gender_norm_srs(df, cols, type):
     return df.drop(columns=renamed_cols)
 
 
-def get_guid_df():
+def get_guid_df(guid_pw):
     xlApp = win32com.client.Dispatch('Excel.Application')
-    xlws = xlApp.Workbooks.Open(GUID_PATH).Sheets(1)
-    content = list(xlws.Range(xlws.Cells(2, 1), xlws.Cells(200,3)))
-    data = [content[i:i+3] for i in range(3, len(content), 3)]
-    df = pd.DataFrame(data, columns=['date', 'demo_study_id', 'subjectkey'])
-    return df.set_index('demo_study_id').drop(columns='date')
+    xlws = xlApp.Workbooks.Open(GUID_PATH, False, True, None, guid_pw).Sheets(1)
+    content = list(xlws.Range(xlws.Cells(2, 2), xlws.Cells(1000,3)).Value)
+    df = pd.DataFrame(content, columns=['demo_study_id', 'subjectkey']).dropna()
+    return df.set_index('demo_study_id')
 
 
 def decrement_scale(df):
@@ -229,18 +232,6 @@ def split_multiform_row(form_dd_df, nih_form, form_df, update_func):
     return result
 
 
-def fill_known_missing(form_df, form):
-    if form == 'cbcl01':
-        form_df[(form_df['demo_study_id'] == 'NT808') & (form_df['visit_date'] == '11/20/2018')][['cbcl_25', 'cbcl_90']] = 999
-    elif form == 'cbcl1_501':
-        form_df[(form_df['demo_study_id'] == 'NT825') & (form_df['visit_date'] == '01/29/2018')][['ycbcl_q74', 'ycbcl_q92']] = 999
-        form_df[(form_df['demo_study_id'] == 'NT828') & (form_df['visit_date'] == '02/20/2018')][' ycbcl_q86'] = 999
-    elif form == 'kbit_ii01':
-        form_df[form_df['demo_study_id'] == 'NT818'][['kbit_iq', 'kbit_riddles_raw', 'kbit_verbal_plus_nonverbal', 'kbit_verbal_raw', 'kbit_verbal_standard']] = 999
-
-    return form_df
-
-
 def replace_staff_names(all_data_df):
     # replace study staff/doctor names with generic references
     subset = [ col for col in all_data_df.columns if col != 'subjectkey']
@@ -251,8 +242,11 @@ def replace_staff_names(all_data_df):
     return all_data_df
 
 
-def get_redcap_df(guid_df, fields=None):
-    api_db_password = getpass('API db password:')
+def format_date_str(date_series):
+    return date_series.map(lambda x: x.strftime('%m/%d/%Y') if pd.notnull(x) else x)
+
+
+def get_redcap_df(guid_df, api_db_password, fields=None):
     r01_project = get_redcap_project('r01', api_db_password)
     nt_project = get_redcap_project('nt', api_db_password)
     r01_df = r01_project.export_records(format='df', fields=fields)
@@ -272,14 +266,12 @@ def get_redcap_df(guid_df, fields=None):
     all_data_df['visit_date'] = all_data_df['visit_date'].fillna(all_data_df['mo3fupc_date']) # 3 month visit doesn't have the usual visit_date col
     all_data_df['visit_date'] = pd.to_datetime(all_data_df['visit_date'])
     all_data_df['interview_age'] = (all_data_df['visit_date'] - pd.to_datetime(all_data_df['demo_dob'])).apply(lambda x: round(.0328767*x.days) if pd.notnull(x) else np.nan)
-    all_data_df['visit_date'] = all_data_df['visit_date'].map(lambda x: x.strftime('%m/%d/%Y') if pd.notnull(x) else x)
 
     return all_data_df
 
-def convert_redcap_to_nih(form_mapping_key, data_dict=None, convert_forms=None, to_date=None):
-    # guid_df = get_guid_df()
-    guid_df = pd.read_csv('guids.csv', index_col=1).rename(columns={'GUID': 'subjectkey'}).drop(columns='Date')
-    guid_df.index.names = ['demo_study_id']
+def convert_redcap_to_nih(api_db_password, guid_pw, form_mapping_key=DEFAULT_FORM_MAP, data_dict=None, convert_forms=None, to_date=None, redo=False):
+    guid_df = get_guid_df(guid_pw)
+
     if not data_dict:
         data_dict = join(BASE_PATH, r'REDCap\NewTicsR01_DataDictionary_2018-11-09.csv')
     data_dict_df = pd.read_csv(data_dict, index_col=0)
@@ -290,9 +282,11 @@ def convert_redcap_to_nih(form_mapping_key, data_dict=None, convert_forms=None, 
     nih_forms = np.unique(form_map_df.index.values)
     if convert_forms:
         nih_forms = [ form for form in convert_forms if form in nih_forms ]
-    all_data_df = get_redcap_df(guid_df)
+    all_data_df = get_redcap_df(guid_df, api_db_password)
 
     drop_cols = [ col for pattern in WITHHOLD for col in all_data_df.columns if re.match(pattern, col) ]
+
+    replace_df = pd.read_csv(join(CONVERSION_DIR, 'item_level_replacements.csv'))
 
     # convert all checkboxes to labels
     checkbox_fields = data_dict_df[data_dict_df['type'] == 'checkbox'].index
@@ -315,8 +309,8 @@ def convert_redcap_to_nih(form_mapping_key, data_dict=None, convert_forms=None, 
     for form in nih_forms:
         required_fields = [ 'subjectkey', 'visit_date', 'interview_age', 'demo_sex']
 
-        upload_file = join('import_forms', form + '.csv')
-        if exists(upload_file):
+        upload_file = join(OUTDIR, form + '.csv')
+        if not redo and exists(upload_file):
             continue
 
         with open(upload_file, 'w', newline='') as f:
@@ -357,15 +351,7 @@ def convert_redcap_to_nih(form_mapping_key, data_dict=None, convert_forms=None, 
 
         print(form_df.columns)
         if to_date:
-            form_df = form_df[pd.to_datetime(form_df['visit_date']) < to_date]
-
-        # endvisit01
-        #   choose parent that signed consent for visit_parents_present when both parents were present
-        if form == 'endvisit01':
-            mom_consent = ['NT818', 'NT833', 'NT835', 'NT839', 'NT841', 'NT843', 'NT844', 'NT881']
-            dad_consent = ['NT822']
-            form_df.loc[form_df['demo_study_id'].isin(mom_consent), 'visit_parents_present'] = 1 # both parents present; mom signed consent
-            form_df.loc[form_df['demo_study_id'].isin(dad_consent), 'visit_parents_present'] = 2 # both parents present; dad signed consent
+            form_df = form_df[form_df['visit_date'] < to_date]
 
         # ndar_subject01
         #   set our dna sample type to saliva, change value of sample usability to string, set required variables about type of study,
@@ -392,6 +378,7 @@ def convert_redcap_to_nih(form_mapping_key, data_dict=None, convert_forms=None, 
         if form == 'socdem01':
             form_df = form_df.apply(separate_multi_response, args=('demo_race', 'fsprg'), axis=1)
             form_df['demo_ethnicity'] = form_df['demo_ethnicity'].replace(['1', '2'], ['2', '1'])
+            form_df['demo_race'] = form_df['demo_race'].replace('Native Hawaiian or Other Pacific Islander', 'Hawaiian or Pacific Islander')
             form_df['demo_mat_edu'] = form_df['demo_mat_edu'].apply(add_years_str).str.slice(0,20)
             form_df['demo_pat_edu'] = form_df['demo_pat_edu'].apply(add_years_str).str.slice(0,20)
 
@@ -572,7 +559,8 @@ def convert_redcap_to_nih(form_mapping_key, data_dict=None, convert_forms=None, 
                 adhd_type_cols = [ col for col in form_df.columns if col.startswith('ksads5_adhd_' + type) ]
                 adhd_type_df = form_df[adhd_type_cols + [ col for col in form_df.columns if not col.startswith('ksads5') ]]
                 adhd_type_df.assign(sldc153=idx, sldc153c=idx)
-                adhd_type_file = 'sldc01_adhd_{}.csv'.format(type)
+                adhd_type_df['visit_date'] = format_date_str(adhd_type_df['visit_date'])
+                adhd_type_file = join(OUTDIR, 'sldc01_adhd_{}.csv'.format(type))
                 with open(adhd_type_file, 'w', newline='') as f:
                     writer = csv.writer(f)
                     writer.writerow(list(re.match('(\w+)(\d{2}$)', form).groups()))
@@ -596,18 +584,25 @@ def convert_redcap_to_nih(form_mapping_key, data_dict=None, convert_forms=None, 
 
             form_df = form_df.dropna(how='all', subset=[col for col in subset + ['tic_freq', 'tsp_tfi', 'data_file1'] if col in form_df])
 
+        # replace specific items that are known to be problematic / missing (documented in cfg/item_level_replacements spreadsheet)
+        form_replace_df = replace_df[replace_df['form'] == form]
+        form_replace_df['visit_date'] = pd.to_datetime(form_replace_df['visit_date'])
+        for _, row in form_replace_df.iterrows():
+            form_df.loc[
+                (form_df['demo_study_id'] == row['demo_study_id']) & (form_df['visit_date'] == row['visit_date']),
+                row['variable']
+            ] = row['new_value']
+
         # convert all text-field ages to months
-        age_to_months_cols = [ col for col in form_df.columns if re.match('(matern|ksads|fh)(_\w*)*_age', col) and \
+        age_to_months_cols = [ col for col in form_df.columns if re.match('(matern|ksads|ksads5|fh)(_\w*)*_age', col) and \
             col not in list(form_dd_df[form_dd_df['type'] == 'radio'].index.values) ]
         if age_to_months_cols:
             # assume ages (other than ones in mab01 which ask for intended unit) will be reported in years
             form_df[age_to_months_cols] = form_df[age_to_months_cols].apply(age_to_units, args=(AgeUnits.MONTHS, AgeUnits.YEARS), axis=1)
 
-        # remove pre-R01 rows
-        print(form_df['visit_date'])
-        form_df = form_df[pd.to_datetime(form_df['visit_date']) > datetime(2017, 8, 1)]
+        form_df = form_df[form_df['visit_date'] > datetime(2017, 8, 1)] # remove pre-R01 rows
 
-        form_df = fill_known_missing(form_df, form)
+        form_df['visit_date'] = format_date_str(form_df['visit_date']) # (after all date comparisons) revert visit date to required string format
 
         # write out data to separate NIH form files
         form_df = form_df.drop(columns=drop_cols + [col for col in form_df.columns if col.endswith('_complete')], errors='ignore')
@@ -620,15 +615,18 @@ def convert_redcap_to_nih(form_mapping_key, data_dict=None, convert_forms=None, 
 def parse_args():
     parser = GooeyParser()
     required = parser.add_argument_group('Required Arguments')
-    required.add_argument('--form_mapping_key', required=True, widget='FileChooser', help='NIH form mapping key excel file')
+    required.add_argument('--api_db_password', widget='PasswordField', required=True, help='password for REDCap token database')
+    required.add_argument('--guid_password', widget='PasswordField', required=True, help='passowrd for GUID spreadsheet')
 
     optional = parser.add_argument_group('Optional Arguments')
+    optional.add_argument('--form_mapping_key', default=DEFAULT_FORM_MAP, widget='FileChooser', help='NIH form mapping key excel file')
     optional.add_argument('--data_dictionary', widget='FileChooser', help='most recent REDCap data dictionary')
     optional.add_argument('-f', '--form', nargs='+', help='NIH form(s) to convert (default is all)')
     optional.add_argument('--to_date', widget='DateChooser', type=lambda d: datetime.strptime(d, '%Y-%m-%d'), help='only process subjects up until date')
+    optional.add_argument('--redo', action='store_true', help='recreate import file even if already exists')
     return parser.parse_args()
 
 
 if __name__ == '__main__':
     args = parse_args()
-    convert_redcap_to_nih(args.form_mapping_key, args.data_dictionary, args.form, args.to_date)
+    convert_redcap_to_nih(args.api_db_password, args.guid_password, args.form_mapping_key, args.data_dictionary, args.form, args.to_date, args.redo)
