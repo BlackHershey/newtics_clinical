@@ -1,17 +1,17 @@
 # modified version of script in jupyter notebook (KJB\Weather_Prediction_scoring.ipynb)
+import pandas as pd
+import re
+import utils
 
 from chardet.universaldetector import UniversalDetector
 from gooey import Gooey, GooeyParser
 from os import listdir, stat
 from os.path import join
-import pandas as pd
-import re
 
-WEATHER_DIRECTORY = '../../../Raw_Data/weather'
+
 OUTPUT_FILE = 'weather_result.csv'
 TOTAL_TRIALS = 90
 INDEX_COLS = ['demo_study_id']
-
 
 def theor_correct(n): # n is the CueId
 	"""Return character code for Theoretically Correct response for the CueId supplied as a string"""
@@ -24,13 +24,16 @@ def theor_correct(n): # n is the CueId
 		return 'x'
 	assert True, "unexpected CueId: {0}".format(n)
 
-def score_weather(dir=WEATHER_DIRECTORY, use_existing=False):
+def score_weather(study_name, use_existing=False):
+	study_vars = utils.get_study_vars(study_name)
+	basedir, indir, outfile = utils.get_scoring_dirs(study_vars, 'weather')
+
 	summary_cols = ['weather_all']
 	if use_existing:
-		return pd.read_csv(join(dir, OUTPUT_FILE)).set_index(INDEX_COLS)[summary_cols]
+		return pd.read_csv(outfile).set_index(INDEX_COLS)[summary_cols]
 
 	filename_format = 'weather-\d{2,3}-1.txt'
-	files = [ f for f in listdir(dir) if re.match(filename_format, f, flags=re.IGNORECASE) ]
+	files = [ f for f in listdir(indir) if re.match(filename_format, f, flags=re.IGNORECASE) ]
 	results = [] # array of arrays of block percentages for each subject
 	detector = UniversalDetector() # files are a mix of utf-8 and utf-16-le
 	for filename in files:
@@ -46,7 +49,7 @@ def score_weather(dir=WEATHER_DIRECTORY, use_existing=False):
 		print("Reading filename {0}".format(filename))
 
 		detector.reset()
-		with open(join(dir, filename), 'rb') as f:
+		with open(join(indir, filename), 'rb') as f:
 			if stat(f.name).st_size == 0:
 				continue # skip if file is empty (do not try to calculate score, do not create empty result row)
 
@@ -56,7 +59,7 @@ def score_weather(dir=WEATHER_DIRECTORY, use_existing=False):
 					break
 			detector.close()
 
-		with open(join(dir, filename), encoding=detector.result['encoding']) as f:
+		with open(join(indir, filename), encoding=detector.result['encoding']) as f:
 			for line in f:
 				linewords = line.split()
 				if not past_header:         # deal with header
@@ -116,7 +119,10 @@ def score_weather(dir=WEATHER_DIRECTORY, use_existing=False):
 
 	columns = ['demo_study_id', 'weather_scores', 'weather_all'] + [ 'weather_block' + str(i) for i in range(1,10) ]
 	df = pd.DataFrame(data = results, columns = columns).set_index(INDEX_COLS)
-	df.to_csv(join(dir, OUTPUT_FILE))
+	df = df.assign(weather_block_data_complete=2)
+	df['redcap_event_name'] = utils.get_screen_event_col(study_vars)
+
+	df.to_csv(outfile)
 	return df[summary_cols]
 
 
@@ -124,9 +130,9 @@ if __name__ == '__main__':
 	@Gooey
 	def parse_args():
 		parser = GooeyParser()
-		parser.add_argument('indir', widget='DirChooser', help='directory containing weather txt files')
+		parser.add_argument('study_name', choices=['nt', 'r01'], help='which study to score data for')
 		return parser.parse_args()
 
 
 	args = parse_args()
-	score_weather(args.indir)
+	score_weather(args.study_name)
