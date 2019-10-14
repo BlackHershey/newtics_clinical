@@ -1,6 +1,6 @@
-import json
 import numpy as np
 import pandas as pd
+import utils
 
 from extract_cpt import extract_cpt
 from gooey import Gooey, GooeyParser
@@ -18,9 +18,7 @@ def concat_df(study_df, other_df):
     return pd.concat([other_df, study_df])
 
 def generate_formatted_table(study_name, api_db_pw, nt_file, r01_file, check_missing, use_existing):
-    with open('cfg/config.json') as config_file:
-        config = json.load(config_file)
-        study_vars = config[study_name]
+    config, study_vars = utils.get_study_vars(study_name)
 
     basedir = study_vars['directories']['base'].format(getuser())
     indir = { k: v.format(basedir) for k,v in study_vars['directories']['input'].items() }
@@ -28,9 +26,9 @@ def generate_formatted_table(study_name, api_db_pw, nt_file, r01_file, check_mis
 
     # get dfs for all data sources
     redcap_df = score_redcap_data(study_name, api_db_pw, nt_file, r01_file, use_existing=use_existing)
-    cpt_df = extract_cpt(indir['CPT'], use_existing=use_existing)
     drz_df = score_drz(indir['DRZ'], use_existing=use_existing)
-    weather_df = score_weather(indir['weather'], use_existing=use_existing)
+    cpt_df = extract_cpt(study_name, use_existing=use_existing)
+    weather_df = score_weather(study_name, use_existing=use_existing)
 
     if study_name == 'r01':
         nt_indir = { k: v.format(config['nt']['directories']['base'].format(getuser())) for k,v in config['nt']['directories']['input'].items() }
@@ -42,6 +40,7 @@ def generate_formatted_table(study_name, api_db_pw, nt_file, r01_file, check_mis
     df = df.join(drz_df, how='left')
     df = df.join(weather_df, how='left')
     df = df.dropna(axis=1, how='all') # drop columns that are all NaN (i.e. measures that don't apply to certain sessions)
+    df = df.drop(columns=[ col for col in df.columns if 'redcap_event_name' in col ])
 
     if check_missing:
         missing_data = df.transpose()
@@ -58,8 +57,7 @@ def generate_formatted_table(study_name, api_db_pw, nt_file, r01_file, check_mis
 
 
 def generate_demographic_summary(study_name, df = None, check_missing=False):
-    with open('cfg/config.json') as config_file:
-        study_vars = json.load(config_file)[study_name]
+    _, study_vars = utils.get_study_vars(study_name)
 
     if df is None:
         df = pd.read_csv('_'.join([study_name, RESULT_OUTPUT_FILE])).set_index('demo_study_id')

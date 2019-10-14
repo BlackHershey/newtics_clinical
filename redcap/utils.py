@@ -8,7 +8,7 @@ def get_study_vars(study_name):
 	with open('cfg/config.json') as config_file:
 		config = json.load(config_file)
 
-	return config[study_name]
+	return config, config[study_name]
 
 
 def get_scoring_dirs(study_vars, assessment):

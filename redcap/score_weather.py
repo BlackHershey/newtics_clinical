@@ -25,7 +25,7 @@ def theor_correct(n): # n is the CueId
 	assert True, "unexpected CueId: {0}".format(n)
 
 def score_weather(study_name, use_existing=False):
-	study_vars = utils.get_study_vars(study_name)
+	_, study_vars = utils.get_study_vars(study_name)
 	basedir, indir, outfile = utils.get_scoring_dirs(study_vars, 'weather')
 
 	summary_cols = ['weather_all']

@@ -16,7 +16,7 @@ measures_without_pct = ['Hit RT', 'Hit RT Std. Error', 'Variability', 'Detectabi
 	'Hit SE Block Change', 'Hit RT ISI Change', 'Hit SE ISI Change']
 
 def extract_cpt(study_name, use_existing=False):
-	study_vars = utils.get_study_vars(study_name)
+	_, study_vars = utils.get_study_vars(study_name)
 	basedir, indir, outfile = utils.get_scoring_dirs(study_vars, 'CPT')
 
 	# generate column names by combining each measure with each attribute (excluding hit_rt x pct)
