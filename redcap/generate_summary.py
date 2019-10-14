@@ -18,7 +18,7 @@ def concat_df(study_df, other_df):
     return pd.concat([other_df, study_df])
 
 def generate_formatted_table(study_name, api_db_pw, nt_file, r01_file, check_missing, use_existing):
-    with open('config.json') as config_file:
+    with open('cfg/config.json') as config_file:
         config = json.load(config_file)
         study_vars = config[study_name]
 
@@ -58,7 +58,7 @@ def generate_formatted_table(study_name, api_db_pw, nt_file, r01_file, check_mis
 
 
 def generate_demographic_summary(study_name, df = None, check_missing=False):
-    with open('config.json') as config_file:
+    with open('cfg/config.json') as config_file:
         study_vars = json.load(config_file)[study_name]
 
     if df is None:

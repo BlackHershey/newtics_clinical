@@ -400,7 +400,7 @@ def determine_days_since_onset(visit_dates, onset_dates):
 
 
 def score_redcap_data(study_name, api_db_password=None, nt_file=None, r01_file=None, use_existing=False):
-	with open('config.json') as config_file:
+	with open('cfg/config.json') as config_file:
 		config = json.load(config_file)
 		study_vars = config[study_name]
 
