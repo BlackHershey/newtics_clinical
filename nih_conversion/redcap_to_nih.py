@@ -18,9 +18,9 @@ sys.path.append(join(dirname(dirname(__file__)), 'redcap'))
 from score_redcap_data import get_redcap_project, merge_projects
 
 BASE_PATH = r'C:\Users\{}\Box\Black_lab\projects\TS\New Tics R01\Data'.format(getuser())
-DEFAULT_FORM_MAP = join(dirname(__file__), 'cfg', '2692.MappingKey.xlsx')
-
 CONVERSION_DIR = join(BASE_PATH, 'NIH Data Archive', 'conversion')
+DATA_DICT_PATH = join(BASE_PATH, 'REDCap', 'REDCap_data_dictionaries', 'NewTicsR01_DataDictionary_2019-10-15.csv')
+FORM_MAP_PATH = join('cfg', '2692.MappingKey.xlsx')
 GUID_PATH = join(BASE_PATH, r'NIMH GUID\GUIDs.xlsx')
 OUTDIR = join(CONVERSION_DIR, 'import_forms')
 
@@ -205,7 +205,7 @@ def update_ygtss(temp_df, form):
 
 
 def split_multiform_row(form_dd_df, nih_form, form_df, update_func):
-    nih_dd_df = pd.read_csv(join('nih_dd', nih_form + '_definitions.csv'), usecols=['ElementName', 'Aliases'])
+    nih_dd_df = pd.read_csv(join(CONVERSION_DIR, 'nih_dd', nih_form + '_definitions.csv'), usecols=['ElementName', 'Aliases'])
     result = None
     redcap_forms = form_dd_df['form'].unique()
     for form in redcap_forms:
@@ -246,11 +246,20 @@ def format_date_str(date_series):
     return date_series.map(lambda x: x.strftime('%m/%d/%Y') if pd.notnull(x) else x)
 
 
-def get_redcap_df(guid_df, api_db_password, fields=None):
-    r01_project = get_redcap_project('r01', api_db_password)
-    nt_project = get_redcap_project('nt', api_db_password)
-    r01_df = r01_project.export_records(format='df', fields=fields)
-    nt_df = nt_project.export_records(fields=['visit_date', 'demo_sex', 'demo_dob'], format='df')
+def get_redcap_df(guid_df, nt_file=None, r01_file=None, api_db_password=None):
+    nt_fields = ['visit_date', 'demo_sex', 'demo_dob']
+    if nt_file:
+        nt_df = pd.read_csv(nt_file, index_col=[0,1])[nt_fields]
+    else:
+        nt_project = get_redcap_project('nt', api_db_password)
+        nt_df = nt_project.export_records(fields=nt_fields, format='df')
+
+    if r01_file:
+        nt_df = pd.read_csv(nt_file, index_col=[0,1])
+    else:
+        r01_project = get_redcap_project('r01', api_db_password)
+        r01_df = r01_project.export_records(format='df')
+
     all_data_df = merge_projects(nt_df, r01_df)
     all_data_df = all_data_df.dropna(how='all')
     all_data_df = all_data_df.join(guid_df, how='inner')
@@ -269,20 +278,18 @@ def get_redcap_df(guid_df, api_db_password, fields=None):
 
     return all_data_df
 
-def convert_redcap_to_nih(api_db_password, guid_pw, form_mapping_key=DEFAULT_FORM_MAP, data_dict=None, convert_forms=None, to_date=None, redo=False):
+def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_forms=None, to_date=None, redo=False):
     guid_df = get_guid_df(guid_pw)
 
-    if not data_dict:
-        data_dict = join(BASE_PATH, r'REDCap\NewTicsR01_DataDictionary_2018-11-09.csv')
-    data_dict_df = pd.read_csv(data_dict, index_col=0)
+    data_dict_df = pd.read_csv(DATA_DICT_PATH, index_col=0)
     data_dict_df = data_dict_df.rename(columns={'Form Name': 'form', 'Field Type': 'type', 'Choices, Calculations, OR Slider Labels': 'choices'})
     data_dict_df = data_dict_df[['form', 'type', 'choices']]
 
-    form_map_df = pd.read_excel(form_mapping_key, skiprows=[1,2], index_col=0, usecols=[1,2])
+    form_map_df = pd.read_excel(FORM_MAP_PATH, skiprows=[1,2], index_col=0, usecols=[1,2])
     nih_forms = np.unique(form_map_df.index.values)
     if convert_forms:
         nih_forms = [ form for form in convert_forms if form in nih_forms ]
-    all_data_df = get_redcap_df(guid_df, api_db_password)
+    all_data_df = get_redcap_df(guid_df, nt_file, r01_file, api_db_password)
 
     drop_cols = [ col for pattern in WITHHOLD for col in all_data_df.columns if re.match(pattern, col) ]
 
@@ -615,18 +622,25 @@ def convert_redcap_to_nih(api_db_password, guid_pw, form_mapping_key=DEFAULT_FOR
 def parse_args():
     parser = GooeyParser()
     required = parser.add_argument_group('Required Arguments')
-    required.add_argument('--api_db_password', widget='PasswordField', required=True, help='password for REDCap token database')
-    required.add_argument('--guid_password', widget='PasswordField', required=True, help='passowrd for GUID spreadsheet')
+    required.add_argument('--guid_password', widget='PasswordField', required=True, help='password for GUID spreadsheet')
+
+    input = parser.add_argument_group('Data Input Options')
+    input.add_argument('--nt_file', widget='FileChooser', help='file containing data exported from NewTics redcap project')
+    input.add_argument('--r01_file', widget='FileChooser', help='file containing data exported from R01 redcap project')
+    input.add_argument('--api_db_password', widget='PasswordField', help='password for access db with REDCap API tokens (only needed if not supplying data files)')
 
     optional = parser.add_argument_group('Optional Arguments')
-    optional.add_argument('--form_mapping_key', default=DEFAULT_FORM_MAP, widget='FileChooser', help='NIH form mapping key excel file')
-    optional.add_argument('--data_dictionary', widget='FileChooser', help='most recent REDCap data dictionary')
-    optional.add_argument('-f', '--form', nargs='+', help='NIH form(s) to convert (default is all)')
     optional.add_argument('--to_date', widget='DateChooser', type=lambda d: datetime.strptime(d, '%Y-%m-%d'), help='only process subjects up until date')
-    optional.add_argument('--redo', action='store_true', help='recreate import file even if already exists')
-    return parser.parse_args()
+    optional.add_argument('-f', '--form', nargs='+', help='NIH form(s) to convert (default is all)')
+    optional.add_argument('--redo', action='store_true', default=True, help='recreate import file even if already exists')
 
+    args = parser.parse_args()
+
+    if not (args.nt_file and args.r01_file) and not args.api_db_password:
+        parser.error('If NT and NT R01 xports are not both supplied, then API db password must be specified')
+
+    return args
 
 if __name__ == '__main__':
     args = parse_args()
-    convert_redcap_to_nih(args.api_db_password, args.guid_password, args.form_mapping_key, args.data_dictionary, args.form, args.to_date, args.redo)
+    convert_redcap_to_nih(args.guid_password, args.nt_file, args.r01_file, args.api_db_password, args.form, args.to_date, args.redo)
