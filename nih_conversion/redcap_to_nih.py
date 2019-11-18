@@ -13,7 +13,7 @@ from itertools import chain
 from os.path import dirname, exists, join
 
 
-print(join(dirname(__file__), 'redcap'))
+print(join(dirname(dirname(__file__)), 'redcap'))
 sys.path.append(join(dirname(dirname(__file__)), 'redcap'))
 from score_redcap_data import get_redcap_project, merge_projects
 
@@ -231,15 +231,23 @@ def split_multiform_row(form_dd_df, nih_form, form_df, update_func):
         result = pd.concat([result, temp_df], sort=False) if result is not None else temp_df
     return result
 
+# replace study staff/doctor names with generic references
+def replace_staff_names(df):
+    subset = [ col for col in df.columns if col != 'subjectkey']
 
-def replace_staff_names(all_data_df):
-    # replace study staff/doctor names with generic references
-    subset = [ col for col in all_data_df.columns if col != 'subjectkey']
-    all_data_df[subset] = all_data_df[subset].replace({
-        '(Emily|Emily Bihun|ECB|Vicki|Vicki Martin|VM|Soyoung|Soyoung Kim|SK|Kevin|Kevin Black|KJB|Samantha|Samantha Ranck|SR|Mary|Jackie|Jackie Hampton|JH)': 'rater',
+    # create search string
+    staff_initials = [ 'ECB', 'VM', 'SK', 'KJB', 'SR', 'JH', 'BS' ]
+    staff_names = [ ('Emily', 'Bihun'), ('Vicki', 'Martin'), ('Soyoung', 'Kim'), ('Kevin', 'Black'), ('Samantha', 'Ranck'), ('Jackie', 'Hampton') ]
+    staff_name_matches = [ '{}(?: {})?'.format(first, last) for first, last in staff_names ] # create regexes of first name with optional last name
+    staff_match_str = '|'.join(staff_initials + staff_name_matches)
+
+    # replace matches in dataframe
+    df[subset] = df[subset].replace({
+        '({})'.format(staff_match_str): 'rater',
         '(Dr. ([A-Z][a-z]+){1,2})': 'doctor'
     }, regex=True)
-    return all_data_df
+
+    return df
 
 
 def format_date_str(date_series):
@@ -399,13 +407,15 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
         # mab01 (maternal/birth history)
         #   remove 'unknown' code for apgar responses, convert the task ages to months, make gest_wks is an integer
         if form == 'mab01':
-            form_df['matern_no_preg'] = form_df['matern_no_preg'].replace('unknown', '')
+            form_df['matern_no_preg'] = form_df['matern_no_preg'].replace('unknown', np.nan).astype(float) # 'unknown' strings break output type -- convert to float after correction
             form_df[['matern_gest_wks']] = form_df[['matern_gest_wks']].apply(age_to_units, args=(AgeUnits.WEEKS,), axis=1)
             form_df[['matern_nicu_days']] = form_df[['matern_nicu_days']].apply(age_to_units, args=(AgeUnits.DAYS,), axis=1)
             apgar_cols = [ col for col in form_df.columns if col.startswith('matern_apgar') ]
             form_df[apgar_cols] = form_df[apgar_cols].replace(11, np.nan)
             matern_age_tsks = [ 'matern_' + col for col in ['hld_head', 'rll_ovr', 'toy_reach', 'sat_up', 'fing_fed', 'crawl', 'pull_to_stand', 'walk', 'slf_fed', 'tlk_wrd_combo'] ]
             form_df[matern_age_tsks] = form_df[matern_age_tsks].apply(age_to_units, args=(AgeUnits.MONTHS,), axis=1)
+            print(form_df['matern_no_preg'].values)
+            print(form_df['matern_no_births'].values)
 
         # tichist01 (family history)
         #   remove relative_ from fh columns to fit within character limit
@@ -531,7 +541,7 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
             form_df[fill_cols] = form_df[fill_cols].fillna(999)
             form_df.loc[:, 'cbcl_sports1_a':'cbcl_sports3_b'] = form_df.loc[:, 'cbcl_sports1_a':'cbcl_sports3_b'].fillna(999) # sports only is marked as required...
 
-            missing_cols = [ 'cbcl_' + col for col in ['emotional', 'sleep', 'pervasive', 'sct', 'ocd', 'ptsd', 'depresspr'] ]
+            missing_cols = [ 'cbcl_' + col for col in ['emotional', 'sleep', 'pervasive', 'depresspr'] ]
             missing_cols = list(chain(*[ [col, col + '_raw'] for col in missing_cols ])) # need cols with and without '_raw' suffix
             for col in missing_cols:
                 form_df[col] = 999
