@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-import utils
+import sys
 
 from extract_cpt import extract_cpt
 from gooey import Gooey, GooeyParser
@@ -9,7 +9,10 @@ from score_redcap_data import score_redcap_data
 from score_weather import score_weather
 
 from getpass import getuser
-from os.path import join
+from os.path import dirname, join
+
+sys.path.append(dirname(__file__))
+import utils
 
 RESULT_OUTPUT_FILE = 'all_data_result.csv'
 MISSING_FILE_TEMPLATE = '{}_all_data_missing{}.{}'
@@ -32,9 +35,9 @@ def generate_formatted_table(study_name, api_db_pw, nt_file, r01_file, check_mis
 
     if study_name == 'r01':
         nt_indir = { k: v.format(config['nt']['directories']['base'].format(getuser())) for k,v in config['nt']['directories']['input'].items() }
-        cpt_df = concat_df(cpt_df, extract_cpt(nt_indir['CPT'], use_existing=use_existing))
+        cpt_df = concat_df(cpt_df, extract_cpt('nt', use_existing=use_existing))
         drz_df = drz_df.combine_first(score_drz(nt_indir['DRZ'], use_existing=use_existing))
-        weather_df = concat_df(weather_df, score_weather(nt_indir['weather'], use_existing=use_existing))
+        weather_df = concat_df(weather_df, score_weather('nt', use_existing=use_existing))
 
     df = redcap_df.join(cpt_df, how='left')
     df = df.join(drz_df, how='left')

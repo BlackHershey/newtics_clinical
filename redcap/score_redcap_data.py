@@ -274,7 +274,7 @@ def score_ksads(ksads_df):
 
 	data_dict_df = pd.concat([
 		pd.read_csv(r'C:\Users\{}\Box\Black_Lab\projects\TS\NewTics\Data\REDCap\NewTics_DataDictionary_2016-03-08.csv'.format(getuser())),
-		pd.read_csv(r'C:\Users\{}\Box\Black_Lab\projects\TS\New Tics R01\Data\REDCap\REDCap_data_dictionaries\NewTicsR01_DataDictionary_2018-11-09.csv'.format(getuser()))
+		pd.read_csv(r'C:\Users\{}\Box\Black_Lab\projects\TS\New Tics R01\Data\REDCap\REDCap_data_dictionaries\NewTicsR01_DataDictionary_2019-10-15.csv'.format(getuser()))
 	])
 	ksads_df['ksads_all_diagnoses'] = ksads_df[all_episode_columns].apply(get_ksads_diagnoses, args=(data_dict_df,), axis=1)
 	ksads_df['ksads_anxiety_diagnoses'] = ksads_df[anxiety_episode_cols].apply(get_ksads_diagnoses, args=(data_dict_df,), axis=1)
@@ -389,15 +389,17 @@ def score_redcap_data(study_name, api_db_password=None, nt_file=None, r01_file=N
 	if study_name == 'nt':
 		df = df[df.index.get_level_values(NTID).isin(nt_df.index.get_level_values(NTID))]
 
-	df = df[~df.index.get_level_values(NTID).isin(EXCLUDED)] # remove excluded/control subjects
 	all_events = list(config['nt']['event_name_renames'].values()) + list(config['r01']['event_name_renames'].values())
 	df = df[df.index.get_level_values(EVENT_NAME).isin(all_events)] # remove rows (prior to calculation) not used in summaries
+	df = df[~df.index.get_level_values(NTID).isin(EXCLUDED)] # remove excluded/control subjects based on list eligibility variable missing for early subjects
+	df = df[df['incl_excl_eligible'] != 0] # remove rows for exlcuded participants based on checklist
+	df['visit_date'] = pd.to_datetime(df['visit_date'], errors='coerce')
+	df = df[df['visit_date'] < datetime.today()] # remove rows for visits that are scheduled, but haven't happened yet
 
 	# generate smaller dataframes for each subset of question data
 	demo_df = df[get_matching_columns(df.columns, '^demo')].copy()
 	demo_df['sex'] = demo_df['demo_sex'].replace([0, 1], ['F', 'M'])
 	demo_df = demo_df.apply(score_demographics, axis=1)
-	df['visit_date'] = pd.to_datetime(df['visit_date'], errors='coerce')
 	demo_df['age'] = (df['visit_date'] - pd.to_datetime(df['demo_dob'])).apply(lambda x: x.days / 365)
 
 	ygtss_df = score_ygtss(df[get_matching_columns(df.columns, '^ygtss.+\d+$')].copy())
@@ -437,14 +439,6 @@ def score_redcap_data(study_name, api_db_password=None, nt_file=None, r01_file=N
 	result.columns = [ '_'.join(map(str,i)) for i in result.columns ]
 	result = result.dropna(axis=1, how='all')
 
-	# # now that everything is calculated, flattened and all-null columns are removed, trasnfer screen_ext data to screen when available
-	# if has_screen_ext:
-	# 	# puts check is a hacky solution to handle that there will always be non-null PUTS columns when row is empty
-	# 	# 	- safe to do, since PUTS has never happened in a screen_ext visit
-	# 	ext_cols = [ col for col in result.columns if col.endswith('_ext') and 'puts' not in col ]
-	# 	result.loc[extra_screen_ids] = result.loc[extra_screen_ids].apply(apply_extra_screen_data, args=(ext_cols,), axis=1)
-	# 	result = result.drop(ext_cols, axis=1) # remove inital screen columns after data has been copied over
-
 	# get all screen rows of original df (and drop event name from index)
 	# 	will be used to calculate things relevant to screen only in flattened df
 	screen_only_df = df.xs('screen', level=EVENT_NAME)
@@ -458,6 +452,7 @@ def score_redcap_data(study_name, api_db_password=None, nt_file=None, r01_file=N
 	result = multi_session_ever_had(result, 'expert_diagnosis_awareness')
 	result = multi_session_ever_had(result, 'dci_attempts_to_suppress_tics')
 
+	# figure out who has completed a 12mo visit
 	twelve_mo_cols = [ col for col in result.columns if col.endswith('_12mo') ]
 	result.insert(0, '12mo_complete', result.apply(lambda x: True if not x[twelve_mo_cols].isnull().all() else None, axis=1))
 
