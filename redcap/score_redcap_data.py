@@ -7,6 +7,10 @@ import os
 import pyodbc
 import re
 
+import sys
+sys.path.append('..')
+import common
+
 from bs4 import BeautifulSoup
 from datetime import datetime
 from getpass import getpass, getuser
@@ -14,7 +18,6 @@ from gooey import Gooey, GooeyParser
 from itertools import product
 from os.path import join
 from redcap import Project, RedcapError
-from sys import stderr, exit
 
 EVENT_NAME = 'event_name'
 NTID = 'demo_study_id'
@@ -26,29 +29,8 @@ ANXIETY_DISORDERS = [ ('pd', 'panic', 'Panic Disorder'), ('sad', 'sepanxiety', '
 	('adc', None, 'Avoidant Disorder of Childhood'), ('sp', 'specphobia', 'Simple Phobia'), ('socp', None, 'Social Phobia'),
 	('agor', 'agoraphobia', 'Agoraphobia'), ('oad', None, 'Overanxious Disorder'), ('gad', None, 'Generalized Anxiety Disorder') ]
 
-DB_PATH_TEMPLATE = r'C:\Users\{}\Box\Black_Lab\projects\TS\NewTics\Data\REDCap\api_tokens.accdb'
-URL = 'https://redcap.wustl.edu/redcap/srvrs/prod_v3_1_0_001/redcap/api/'
 
 ALPHA_ONLY = re.compile('([^\sa-zA-Z]|_)+')
-
-def get_redcap_project(study_name, password):
-	user = getuser()
-	try:
-		conn_str = (
-			r'DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};'
-			r'DBQ=' + DB_PATH_TEMPLATE.format(user) + ';'
-			r'PWD=' + password
-		)
-		conn = pyodbc.connect(conn_str)
-	except pyodbc.Error:
-		exit('Error connecting to access database')
-
-	cursor = conn.cursor()
-	sql = 'SELECT {}_token FROM api_tokens WHERE user_id = ?'.format(study_name)
-	cursor.execute(sql, (user,))
-	api_token = cursor.fetchone()[0]
-	return Project(URL, api_token)
-
 
 def rename_events(df, study_vars):
 	# rename columns to be more friendly for flattened (all events on one row) display
@@ -65,25 +47,9 @@ def get_dataframe_from_file(file_name, study_vars):
 
 
 def get_dataframe_from_api(study_name, study_vars, db_password, fields=None):
-	project = get_redcap_project(study_name, db_password)
+	project = common.get_redcap_project(study_name, db_password)
 	df = project.export_records(format='df', fields=fields)
 	return rename_events(df.reset_index(), study_vars)
-
-
-def merge_projects(df1, df2):
-	right_suffix = '_temp'
-	merged_df = df1.merge(df2, how='outer', left_index=True, right_index=True, suffixes=('', right_suffix))
-
-	# use other study to fill in missing values in current study
-	fill_cols = [ col[:-len(right_suffix)] for col in merged_df.columns if col.endswith(right_suffix) ]
-	for col in fill_cols:
-		merged_df[col] = merged_df[col].fillna(merged_df[col + right_suffix])
-
-	# cleanup merge conflict columns
-	other_cols = [ col for col in merged_df.columns if col.endswith(right_suffix) ]
-	merged_df.drop(other_cols, axis=1, inplace=True)
-
-	return merged_df
 
 
 def get_matching_columns(columns, pattern):
@@ -308,7 +274,7 @@ def score_ksads(ksads_df):
 
 	data_dict_df = pd.concat([
 		pd.read_csv(r'C:\Users\{}\Box\Black_Lab\projects\TS\NewTics\Data\REDCap\NewTics_DataDictionary_2016-03-08.csv'.format(getuser())),
-		pd.read_csv(r'C:\Users\{}\Box\Black_Lab\projects\TS\New Tics R01\Data\REDCap\NewTicsR01_DataDictionary_2018-11-09.csv'.format(getuser()))
+		pd.read_csv(r'C:\Users\{}\Box\Black_Lab\projects\TS\New Tics R01\Data\REDCap\REDCap_data_dictionaries\NewTicsR01_DataDictionary_2018-11-09.csv'.format(getuser()))
 	])
 	ksads_df['ksads_all_diagnoses'] = ksads_df[all_episode_columns].apply(get_ksads_diagnoses, args=(data_dict_df,), axis=1)
 	ksads_df['ksads_anxiety_diagnoses'] = ksads_df[anxiety_episode_cols].apply(get_ksads_diagnoses, args=(data_dict_df,), axis=1)
@@ -418,7 +384,7 @@ def score_redcap_data(study_name, api_db_password=None, nt_file=None, r01_file=N
 	nt_df = get_dataframe_from_api('nt', config['nt'], db_password) if not nt_file else get_dataframe_from_file(nt_file, config['nt'])
 	nt_df['incl_excl_grp'] = 'NT'
 	r01_df = get_dataframe_from_api('r01', config['r01'], db_password) if not r01_file else get_dataframe_from_file(r01_file,  config['r01'])
-	df = merge_projects(nt_df, r01_df)
+	df = common.merge_projects(nt_df, r01_df)
 
 	if study_name == 'nt':
 		df = df[df.index.get_level_values(NTID).isin(nt_df.index.get_level_values(NTID))]

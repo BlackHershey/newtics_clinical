@@ -3,19 +3,17 @@ import numpy as np
 import pandas as pd
 import re
 import win32com.client
+
 import sys
+sys.path.append('..')
+import common
 
 from datetime import datetime
 from enum import Enum
 from getpass import getuser, getpass
 from gooey import Gooey, GooeyParser
 from itertools import chain
-from os.path import dirname, exists, join
-
-
-print(join(dirname(__file__), 'redcap'))
-sys.path.append(join(dirname(dirname(__file__)), 'redcap'))
-from score_redcap_data import get_redcap_project, merge_projects
+from os.path import dirname, exists, join, realpath
 
 BASE_PATH = r'C:\Users\{}\Box\Black_lab\projects\TS\New Tics R01\Data'.format(getuser())
 CONVERSION_DIR = join(BASE_PATH, 'NIH Data Archive', 'conversion')
@@ -251,16 +249,16 @@ def get_redcap_df(guid_df, nt_file=None, r01_file=None, api_db_password=None):
     if nt_file:
         nt_df = pd.read_csv(nt_file, index_col=[0,1])[nt_fields]
     else:
-        nt_project = get_redcap_project('nt', api_db_password)
+        nt_project = common.get_redcap_project('nt', api_db_password)
         nt_df = nt_project.export_records(fields=nt_fields, format='df')
 
     if r01_file:
         nt_df = pd.read_csv(nt_file, index_col=[0,1])
     else:
-        r01_project = get_redcap_project('r01', api_db_password)
+        r01_project = common.get_redcap_project('r01', api_db_password)
         r01_df = r01_project.export_records(format='df')
 
-    all_data_df = merge_projects(nt_df, r01_df)
+    all_data_df = common.merge_projects(nt_df, r01_df)
     all_data_df = all_data_df.dropna(how='all')
     all_data_df = all_data_df.join(guid_df, how='inner')
     all_data_df = all_data_df[all_data_df['incl_excl_eligible'] != 0] # remove rows for excluded participants
