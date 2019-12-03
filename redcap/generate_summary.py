@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import sys
+import utils
 
 from extract_cpt import extract_cpt
 from gooey import Gooey, GooeyParser
@@ -10,9 +11,6 @@ from score_weather import score_weather
 
 from getpass import getuser
 from os.path import dirname, join
-
-sys.path.append(dirname(__file__))
-import utils
 
 RESULT_OUTPUT_FILE = 'all_data_result.csv'
 MISSING_FILE_TEMPLATE = '{}_all_data_missing{}.{}'
