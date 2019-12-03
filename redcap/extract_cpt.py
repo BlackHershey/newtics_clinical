@@ -26,7 +26,7 @@ def extract_cpt(study_name, use_existing=False):
 	all_measures = [ s.lower().replace('.', '').replace(' ', '_') for s in all_measures ]
 	attributes = [ 'n', 't', 'pctile', 'guideline', 'pct' ]
 	#columns = ['demo_study_id' , 'cpt_type'] + [ 'cpt_' + '_'.join([a,b]) for a, b in list(itertools.product(all_measures, attributes)) ]
-	columns = ['demo_study_id', 'cpt_type'] + [ 'cpt_' + '_'.join([a,b]) for a, b in list(itertools.product(all_measures, attributes)) ]
+	columns = ['demo_study_id'] + [ 'cpt_' + '_'.join([a,b]) for a, b in list(itertools.product(all_measures, attributes)) ]
 
 	attributes.remove('guideline')
 	summary_columns = [ col for col in columns if re.match('cpt_(omissions|commissions|hit_rt)_(' + '|'.join(attributes) + ')', col) ]
@@ -44,12 +44,14 @@ def extract_cpt(study_name, use_existing=False):
 		print('Extracting', filename)
 		file_contents = pd.read_excel(join(indir, filename)).values.tolist()
 
-		cpt_type = cpt_type.upper()
-		if cpt_type == 'CPT':
-			cpt_type += '-II'
+		# cpt_type = cpt_type.upper()
+		# if cpt_type == 'CPT':
+		# 	cpt_type += '-II'
 
 		one_more = False
-		result_row = [subject, cpt_type]
+		# result_row = [subject, cpt_type]
+		result_row = [subject]
+
 		for row in file_contents:
 			row = [ str(x) for x in row ]
 			if one_more: # then next line should be %
@@ -69,7 +71,7 @@ def extract_cpt(study_name, use_existing=False):
 
 	df = pd.DataFrame(data = results, columns = columns).set_index(INDEX_COLS)
 	df = df.dropna(axis=1, how='all') # drop columns that are all NaN measues that don't apply to all labels
-	df = df.dropna(axis=0, how='all') # drop rows where assessment was not completed
+	df = df.dropna(axis=0, how='all') # drop rows where assessment was not completed # FIXME -- remove cpt_type because breaks na logic + upload
 	df = df.assign(cpt_scored_data_complete=2)
 	df['redcap_event_name'] = utils.get_screen_event_col(study_vars)
 
