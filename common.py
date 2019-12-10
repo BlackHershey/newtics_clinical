@@ -40,3 +40,15 @@ def merge_projects(df1, df2):
 	merged_df.drop(other_cols, axis=1, inplace=True)
 
 	return merged_df
+
+
+def get_project_df(project_name, datafile=None, api_db_password=None, fields=None):
+	if datafile:
+		df = pd.read_csv(datafile, index_col=[0,1])
+		if fields:
+			df = df[fields]
+	else:
+		redcap_project = get_redcap_project(project_name, api_db_password)
+		df = redcap_project.export_records(fields=fields, format='df')
+	return df
+

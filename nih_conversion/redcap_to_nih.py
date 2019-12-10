@@ -254,17 +254,8 @@ def format_date_str(date_series):
 
 def get_redcap_df(guid_df, nt_file=None, r01_file=None, api_db_password=None):
     nt_fields = ['visit_date', 'demo_sex', 'demo_dob']
-    if nt_file:
-        nt_df = pd.read_csv(nt_file, index_col=[0,1])[nt_fields]
-    else:
-        nt_project = common.get_redcap_project('nt', api_db_password)
-        nt_df = nt_project.export_records(fields=nt_fields, format='df')
-
-    if r01_file:
-        nt_df = pd.read_csv(nt_file, index_col=[0,1])
-    else:
-        r01_project = common.get_redcap_project('r01', api_db_password)
-        r01_df = r01_project.export_records(format='df')
+    nt_df = common.get_project_df(guid_df, 'nt', nt_file, api_db_password, nt_fields)
+    r01_df = common.get_project_df(guid_df, 'r01', nt_file, api_db_password)
 
     all_data_df = common.merge_projects(nt_df, r01_df)
     all_data_df = all_data_df.dropna(how='all')
