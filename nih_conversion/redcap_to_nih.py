@@ -25,10 +25,11 @@ OUTDIR = join(CONVERSION_DIR, 'import_forms')
 WITHHOLD = [ 'incl_excl_ic', 'incl_excl_who', 'incl_excl_new_tics_grp', 'share_data_permission', 'share_data_comments',
     'r01_survey_consent', 'demo_dob', 'childs_age', 'incl_excl_fon_scrn', 'dna_sample_lab_id', 'cbcl_birthdate', 'mo3fupc_who',
     '\w*_data_files*$', 'age_at_visit', 'visit_referral_source' ]
-CHECKBOX_TO_LABEL = [ 'incl_excl_concom_meds', 'demo_race']
-OTHER_LABELS_NEEDED = [ 'demo_\w*_mari', 'srs_800_q\d+', 'pedsql_version', 'ksads5_asd_specify' ]
 
-NUMBER_PATTERN = '(\d+(?:\.\d+)?)'
+CHECKBOX_TO_LABEL = [ 'incl_excl_concom_meds', 'demo_race'] # checkbox fields that will need to expanded into concatenated label string
+OTHER_LABELS_NEEDED = [ 'demo_\w*_mari', 'srs_800_q\d+', 'pedsql_version', 'ksads5_asd_specify' ] # other fields to concatenate label strings
+
+NUMBER_PATTERN = '(\d+(?:\.\d+)?)' # regex for numbers only string (both int and float)
 
 class AgeUnits(Enum):
     YEARS = 0
@@ -36,57 +37,84 @@ class AgeUnits(Enum):
     WEEKS = 2
     DAYS = 3
 
-
+"""
+Get all columns that match a regex pattern
+"""
 def get_matching_cols(df, pattern):
     return [ col for col in df.columns if re.match(pattern, col) ]
 
 
+"""
+Get map of options for radio button/checkbox variable (key = value stored in data, value = human-readable label)
+"""
 def get_data_dict_options_map(df, data_dict_df, variable):
     choices_str = data_dict_df.xs(variable)['choices']
     options = [ choice.split(',', 1) for choice in choices_str.split('|') ]
     options = [ opt for opt in options if opt != ['']] # handle extra '|' at end of choice specification
     return { int(option[0].strip()): option[-1].strip() for option in options }
 
-
+"""
+Concatenate multiple value response into one string with specified delimiter
+"""
 def concat_column_values(row, sep=';'):
     return row[row.notnull()].astype(str).str.cat(sep=sep) if pd.notnull(row).any() else np.nan
 
 
-# for (all?) checkboxes
+"""
+Consolidate checkbox responses into one variable
+(Individual checkboxes for a variable are stored in separate columns with ___# suffix)
+"""
 def replace_checkbox_with_label(df, data_dict_df, variable, use_label=False):
     num_to_label_map = get_data_dict_options_map(df, data_dict_df, variable)
-    checkbox_cols = get_matching_cols(df, variable + '___\d+')
+    checkbox_cols = get_matching_cols(df, variable + '___\d+') # get all columns that correspond to variable
     for col in checkbox_cols:
-        checkbox_num = re.search('___(\d+)', col).group(1)
-        replace1 = num_to_label_map[int(checkbox_num)] if use_label else checkbox_num
-        df[col] = df[col].replace([0, 1], [np.nan, replace1])
+        checkbox_num = re.search('___(\d+)', col).group(1) 
+        replace1 = num_to_label_map[int(checkbox_num)] if use_label else checkbox_num # optionally replace number with label 
+        df[col] = df[col].replace([0, 1], [np.nan, replace1]) # swap in expected values
         df[col] = df[col].replace('None of the above', np.nan)
 
-    df[variable] = df[checkbox_cols].apply(concat_column_values, axis=1)
-    return df.drop(columns=checkbox_cols)
+    df[variable] = df[checkbox_cols].apply(concat_column_values, axis=1) # consolidate responses 
+    df = df.drop(columns=checkbox_cols) # drop the separate columns 
+    return df
 
 
-# for radio buttons
+"""
+Get label for radio button selected response
+"""
 def replace_num_with_label(df, data_dict_df, variable):
     num_to_label_map = get_data_dict_options_map(df, data_dict_df, variable)
     df[variable] = df[variable].replace(num_to_label_map)
     return df
 
+
+"""
+Convert reported ages to expected units
+    Parses free-text strings (i.e. 1yr 2mo) to extract number associated with each unit, then calculates response in desired units
+Input params:
+    row - row of dataframe 
+    dest_unit - unit that we want to the variable to be in
+    src_unit - optional, unit that we collect the variable in (if different from NIH-desired unit)
+
+"""
 def age_to_units(row, dest_unit, src_unit=None):
-    src_unit = dest_unit if not src_unit else src_unit
-    age_searches = [ 'year|yr|y', 'month|mo|m', 'week|wk|w', 'day|d' ]
+    src_unit = dest_unit if not src_unit else src_unit # if no src_unit, assume we collect it in the same units NIH expects
+    age_searches = [ 'year|yr|y', 'month|mo|m', 'week|wk|w', 'day|d' ] # possible abbreviations for time units
     for col in row.axes[0].tolist():
-        yrs_mos_wks_days = [0, 0, 0, 0]
+        yrs_mos_wks_days = [0, 0, 0, 0] # create array to keep track of parsed units
+        
+        # if the response is just a number, set parsing array of src unit to that number
         no_units = re.search(NUMBER_PATTERN +'$', str(row[col]))
         if no_units:
             yrs_mos_wks_days[src_unit.value] = float(no_units.group(1))
+        # otherwise, for each possible unit string extract the number associated with it and store it in the parsing array
         else:
             for i, search_str in enumerate(age_searches):
                 res = re.search('(?:' + NUMBER_PATTERN + ' *(?:' + search_str +')s*)', str(row[col]), flags=re.IGNORECASE)
                 yrs_mos_wks_days[i] = float(res.group(1)) if res else yrs_mos_wks_days[i]
 
+        # based on the desired units, calculate value in desired units using all units in response
         if dest_unit == AgeUnits.YEARS:
-            age = yrs_mos_wks_days[0] + (yrs_mos_wks_days[1] / 12) + (yrs_mos_wks_days[2] / 52) + (yrs_mos_wks_days[3] / 365)
+            age = yrs_mos_wks_days[0] + (yrs_mos_wks_days[1] / 12) + (yrs_mos_wks_days[2] / 52) + (yrs_mos_wks_days[3] / 365) 
         elif dest_unit == AgeUnits.MONTHS:
             age = (yrs_mos_wks_days[0] * 12) + yrs_mos_wks_days[1] + (yrs_mos_wks_days[2] / 4.345) + (yrs_mos_wks_days[3] /  30.417)
         elif dest_unit == AgeUnits.WEEKS:
@@ -107,6 +135,11 @@ def mom_or_dad(response):
         return np.nan
 
 
+"""
+Handle setting SES for divorced parents
+    NIH only allows specification of one parent's partner's info (should be that of the subject's primary residence) but we collect both
+    Figure out who the primary residence is and then fill in their partner's info
+"""
 def ses_primary_partner(row):
     spouse_cols = [ 'ses_edu_level', 'ses_occ' ]
     mpartner_cols = [ col + '_mpartner' for col in spouse_cols ]
@@ -130,6 +163,11 @@ def add_years_str(row):
     return row + ' years' if str(row).isdigit() else row
 
 
+"""
+Break up concatenated variables
+    Certain variables (i.e. race) we allow multiple responses but NIH doesn't 
+    (they want one response in the main variable and then others in an "additional details" overflow columns)
+"""
 def separate_multi_response(row, response_col, other_col=None, sep=';'):
     if pd.notnull(row[response_col]):
         responses = row[response_col].split(sep)
@@ -138,6 +176,10 @@ def separate_multi_response(row, response_col, other_col=None, sep=';'):
     return row
 
 
+"""
+Split up the raw and Tscores by sex
+    NIH has separate columns for male/female norms
+"""
 def gender_norm_srs(df, cols, type):
     rename_dict = { col: type + str(i+1) for i, col in enumerate(cols[:5]) }
     total_col = 'srs_total{}'.format('_t' if type == 'tscore' else '')
@@ -154,6 +196,9 @@ def gender_norm_srs(df, cols, type):
     return df.drop(columns=renamed_cols)
 
 
+"""
+Read in password-protected Excel file that contains NTID/GUID mapping
+"""
 def get_guid_df(guid_pw):
     xlApp = win32com.client.Dispatch('Excel.Application')
     xlws = xlApp.Workbooks.Open(GUID_PATH, False, True, None, guid_pw).Sheets(1)
@@ -166,12 +211,22 @@ def decrement_scale(df):
     return df.select_dtypes(['int']) - 1
 
 
+"""
+ADHD RS updates -- shared between all form versions
+    Add form metadata to ADHD RS (multi-form; we collect as separate forms, NIH has separate row for each form)
+"""
 def update_adhdrs(temp_df, form):
     who = 'expert' if 'expert' in form else 'parent'
     which = 'worst-ever' if 'lifetime' in form else 'past week'
     temp_df['version_form'] = '; '.join([who, which])
     return temp_df
 
+
+"""
+CYBOCS updates -- shared between all form versions
+    Add form metadata to CYBOCS (multi-form; we collect as separate forms, NIH has separate row for each form)
+    Choose most specific response from checkbox fields where we allow multiple but NIH doesn't
+"""
 def update_cybocs(temp_df, form):
     if form in ['expert_cybocs_symptoms', 'cybocs_12mo']:
         temp_df = temp_df.replace('1;2', '1') # for followup, 1 (past week) is more specific than 2 (since last visit)
@@ -184,8 +239,13 @@ def update_cybocs(temp_df, form):
     temp_df['version_form'] = '; '.join(filter(None, [who, which]))
     return temp_df
 
-def update_ticscreener(temp_df, form):
 
+"""
+TSCL updates -- shared between all form versions
+    Add form metadata to TSCL (multi-form; we collect as separate forms, NIH has separate row for each form)
+    Choose most specific response from checkbox fields where we allow multiple but NIH doesn't
+"""
+def update_ticscreener(temp_df, form):
     if form == 'tic_symptom_checklist_screening':
         temp_df = temp_df.replace('1;2', '2') # for screening checklist, 2 (past week) is more specific than 1 (lifetime)
     else:
@@ -197,39 +257,57 @@ def update_ticscreener(temp_df, form):
     temp_df['version_form'] = 'expert' if 'expert' in form else 'parent'
     return temp_df
 
+
+"""
+YGTSS updates -- shared between all form versions
+    Add form metadata to YGTSS (multi-form; we collect as separate forms, NIH has separate row for each form)
+"""
 def update_ygtss(temp_df, form):
     temp_df['version_form'] = 'past week' if 'past_week' in form else 'post-drz'
     return temp_df
 
 
+"""
+Handle splitting of multiform rows into separate rows
+    We collect multiple versions of forms from subjects at the same timepoint (i.e. in one row, but NIH wants them to have their own row)
+    We also split some forms up into screen/12mo that contain the same data with different variable names (i.e. suffixed with _12mo)
+    
+Input params:
+    form_dd_df - REDCap data dictionary dataframe for form
+    nih_form - NIH form shortname
+    form_df - dataframe with responses for particular form
+    update_func - form-specific function to call after splitting (i.e. update_ygtss, update_adhdrs, etc.)
+"""
 def split_multiform_row(form_dd_df, nih_form, form_df, update_func):
-    nih_dd_df = pd.read_csv(join(CONVERSION_DIR, 'nih_dd', nih_form + '_definitions.csv'), usecols=['ElementName', 'Aliases'])
+    nih_dd_df = pd.read_csv(join(CONVERSION_DIR, 'nih_dd', nih_form + '_definitions.csv'), usecols=['ElementName', 'Aliases'])     # read in NIH data dictionary
     result = None
-    redcap_forms = form_dd_df['form'].unique()
+    redcap_forms = form_dd_df['form'].unique() # get all REDCap forms that map to NIH form
     for form in redcap_forms:
-        form_cols = [ col for col in form_df if col in form_dd_df[form_dd_df['form'] == form].index ]
+        form_cols = [ col for col in form_df if col in form_dd_df[form_dd_df['form'] == form].index ] # get all columns for a REDCap form
         print('\t', form, len(form_cols))
         temp_df = form_df[form_cols + [ col for col in form_df if col not in form_dd_df.index.values ]]
         temp_df = temp_df.dropna(how='all', subset=form_cols) # remove rows that are all null for current pattern (helps with screen/12mo form split)
-        # temp_df = temp_df.rename(columns = {
-        #     col: nih_dd_df[nih_dd_df['Aliases'].str.contains(col, na=False)].iloc[0,0] for col in form_cols if col not in nih_dd_df['ElementName'].values
-        # })
         for col in form_cols:
-            if col  in nih_dd_df['ElementName'].values:
+            if col in nih_dd_df['ElementName'].values:
                 continue
             try:
+                # rename conflicting column to the NIH variable name
                 temp_df = temp_df.rename(columns={col: nih_dd_df[nih_dd_df['Aliases'].str.contains(col, na=False)].iloc[0,0]})
             except Exception as e:
                 print(col)
                 raise e
 
+        # update df if specfied
         if update_func:
-            temp_df = update_func(temp_df, form)
+            temp_df = update_func(temp_df, form) # update done here because we need to know the redcap form name
         temp_df = temp_df.loc[:, ~temp_df.columns.duplicated()] # remove duplicate column names (see first comment: https://stackoverflow.com/a/27412913)
-        result = pd.concat([result, temp_df], sort=False) if result is not None else temp_df
+        result = pd.concat([result, temp_df], sort=False) if result is not None else temp_df # concatenate along row-axis 
     return result
 
-# replace study staff/doctor names with generic references
+"""
+Replace study staff/doctor names with generic references
+    NIH considers our info as PII
+"""
 def replace_staff_names(df):
     subset = [ col for col in df.columns if col != 'subjectkey']
 
@@ -247,7 +325,9 @@ def replace_staff_names(df):
 
     return df
 
-
+"""
+Format date string in NIH-expected date format
+"""
 def format_date_str(date_series):
     return date_series.map(lambda x: x.strftime('%m/%d/%Y') if pd.notnull(x) else x)
 
@@ -295,7 +375,7 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
     # convert all checkboxes to labels
     checkbox_fields = data_dict_df[data_dict_df['type'] == 'checkbox'].index
     for field in checkbox_fields:
-        use_label = (field in CHECKBOX_TO_LABEL)
+        use_label = (field in CHECKBOX_TO_LABEL) # check if combined response should be values or labels
         if not field + '___1' in all_data_df.columns:
             continue
         all_data_df =  replace_checkbox_with_label(all_data_df, data_dict_df, field, use_label)
@@ -303,6 +383,7 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
     # replace study staff/doctor names with generic references
     all_data_df = replace_staff_names(all_data_df)
 
+    # fields required by NIH forms that don't appear in matched REDCap form
     form_field_map = {
         'ndar_subject01': ['incl_excl_grp', 'demo_race'],
         'srs02': ['incl_excl_grp', 'demo_completed_by'],
@@ -311,29 +392,35 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
     }
 
     for form in nih_forms:
-        required_fields = [ 'subjectkey', 'visit_date', 'interview_age', 'demo_sex']
+        required_fields = [ 'subjectkey', 'visit_date', 'interview_age', 'demo_sex'] # fields shared by every NIH form
 
         upload_file = join(OUTDIR, form + '.csv')
         if not redo and exists(upload_file):
             continue
 
+        # write NIH header for submission file (nih form name, nih form version)
         with open(upload_file, 'w', newline='') as f:
             writer = csv.writer(f)
             writer.writerow(list(re.match('(\w+)(\d{2}$)', form).groups()))
 
-        redcap_forms = list(form_map_df.xs(form).values.flatten())
+        redcap_forms = list(form_map_df.xs(form).values.flatten()) # get all REDCap forms associated with current NIH form
         print(form, redcap_forms)
 
+        # Get columns in REDCap forms
         form_dd_df = data_dict_df[data_dict_df['form'].isin(redcap_forms)]
         form_cols = list(form_dd_df[form_dd_df['type'] != 'descriptive'].index.values)
-        keep_cols = form_cols + required_fields
+
+        # keep form-specific cols, shared cols, and form-specific required cols (that exist outside current forms)
+        keep_cols = form_cols + required_fields 
         if form in form_field_map:
             keep_cols += form_field_map[form]
         form_df = all_data_df[np.unique(keep_cols)].reset_index()
-        #subset = [ col for col in form_cols if col not in required_fields+WITHHOLD ] # TODO: figure out why I pulled out required_fields -- because it will allow pre-R01 data in
+
+        # remove empty rows
         subset = [ col for col in form_cols if col not in WITHHOLD ]
         if form != 'tsp01': # since we're joining to a different csv for tsp + most subjects do not have new form data, we cannot drop here
             form_df = form_df.dropna(how='all', subset=subset)
+
         form_df = form_df.rename(columns={'demo_sex': 'gender'})
 
         # convert numbers to label where needed
@@ -341,21 +428,22 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
         for col in convert_cols:
             form_df =  replace_num_with_label(form_df, data_dict_df, col)
 
+        # handle event name column from REDCap export
         event_name_renames = ['Screening', '3 Month Follow-up', '12 Month Follow-up'] + [ 'Clinical Follow-up ' + str(n) for n in range(1,5) ]
         keep_event_col =  ['endvisit01', 'ticscreener01', 'mvhsp01', 'ygtss01', 'tsp01']
         if form not in keep_event_col:
-            form_df.drop(columns='redcap_event_name', inplace=True) # all forms other than endvisit do not need the 'redcap_event_name' index col
+            form_df.drop(columns='redcap_event_name', inplace=True) # all other forms do not need the 'redcap_event_name' index col, so drop it
         else:
             form_df['redcap_event_name'] = form_df['redcap_event_name'].replace(
                 ['screening_visit_arm_1', '3_month_follow_up_arm_1', '12_month_follow_up_arm_1'] + [ 'clinical_follow_up_arm_1' + l for l in ['', 'b', 'c', 'd'] ],
                 event_name_renames
             )
-            rename = 'version_form' if form in keep_event_col[-2:] else 'visit'
+            rename = 'version_form' if form in keep_event_col[-2:] else 'visit' # rename "redcap_event_name" depending on form
             form_df = form_df.rename(columns={'redcap_event_name': rename})
 
         print(form_df.columns)
         if to_date:
-            form_df = form_df[form_df['visit_date'] < to_date]
+            form_df = form_df[form_df['visit_date'] < to_date] # remove rows newer than date
 
         # ndar_subject01
         #   set our dna sample type to saliva, change value of sample usability to string, set required variables about type of study,
@@ -403,8 +491,6 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
             form_df[apgar_cols] = form_df[apgar_cols].replace(11, np.nan)
             matern_age_tsks = [ 'matern_' + col for col in ['hld_head', 'rll_ovr', 'toy_reach', 'sat_up', 'fing_fed', 'crawl', 'pull_to_stand', 'walk', 'slf_fed', 'tlk_wrd_combo'] ]
             form_df[matern_age_tsks] = form_df[matern_age_tsks].apply(age_to_units, args=(AgeUnits.MONTHS,), axis=1)
-            print(form_df['matern_no_preg'].values)
-            print(form_df['matern_no_births'].values)
 
         # tichist01 (family history)
         #   remove relative_ from fh columns to fit within character limit
