@@ -15,7 +15,8 @@ base = "Win32GUI" if sys.platform == "win32" else "console"
 
 executables = [
 	Executable('redcap_to_nih.py', base=base),
-	Executable('merge_image03.py', base=base)
+	Executable('merge_image03.py', base=base),
+    Executable('check_phi.py', base=base)
 ]
 
 build_exe_options = {
