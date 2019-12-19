@@ -5,6 +5,7 @@ import utils
 
 from extract_cpt import extract_cpt
 from gooey import Gooey, GooeyParser
+from scan_summary import summarize_scan_stats
 from score_drz import score_drz
 from score_redcap_data import score_redcap_data
 from score_weather import score_weather
@@ -64,7 +65,8 @@ def generate_demographic_summary(study_name, df = None, check_missing=False):
         df = pd.read_csv('_'.join([study_name, RESULT_OUTPUT_FILE])).set_index('demo_study_id')
 
     basedir = study_vars['directories']['base'].format(getuser())
-    writer = pd.ExcelWriter(join(study_vars['directories']['output'].format(basedir), '{}_summary.xlsx'.format(study_name)))
+    outdir = join(study_vars['directories']['output'].format(basedir))
+    writer = pd.ExcelWriter(join(outdir, '{}_summary.xlsx'.format(study_name)))
 
     columns = [ 'sex_screen', 'non_white_screen', 'age_screen', 'kbit_iq_screen', 'days_since_onset', 'ygtss_past_week_expert_total_tic',
         'ygtss_past_week_expert_m_total', 'ygtss_past_week_expert_p_total', 'ygtss_past_week_expert_total_impairment', 'ygtss_minimal_impairment', 'puts_total', 'puts_total_completed_only',
@@ -133,6 +135,7 @@ def generate_demographic_summary(study_name, df = None, check_missing=False):
             summary_df.to_excel(writer, sheet_name='{}_{}'.format(group, visit))
 
     writer.save()
+    summarize_scan_stats(outdir)
 
 
 if __name__ == '__main__':

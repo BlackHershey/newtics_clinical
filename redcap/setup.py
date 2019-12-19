@@ -18,7 +18,8 @@ executables = [
 	Executable('score_drz.py', base=base),
     Executable('score_weather.py', base=base),
 	Executable('score_redcap_data.py', base=base),
-	Executable('generate_summary.py', base=base)
+	Executable('generate_summary.py', base=base),
+    Executable('scan_summary.py', base=base)
 ]
 
 build_exe_options = {
