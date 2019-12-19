@@ -33,8 +33,17 @@ def get_phi_lut(password):
 			' WHERE Contacts.NewTicsID IS NOT NULL';
 	return pd.read_sql(sql, conn)
 
+
+def check_phi(df, lookup_string):
+	for col in df.columns:
+		# for each column, search for a name surrounded by word boundaries or followed by possessive 
+		#	extra checks are to ensure names that are common word prefixes or contractions don't get picked up (otherwise lots of extra fields to check)
+		df[col] = df[col].apply(lambda x: x if pd.notnull(x) and re.search(r'\b({})(\s|\'s)'.format(lookup_string), str(x), flags=re.IGNORECASE) else np.nan)
+	df = df.dropna(how='all', axis=1).dropna(how='all', axis=0) # drop row and columns that are completely empty (again, limits what needs to be visually checked)
+	return df
+
 """
-Generate file with cells that possibly contain subject PHI -- issues will need to be corrected in REDCap prior to data sharing
+Generate file with cells that possibly contain subject PHI -- issueswill need to be corrected in REDCap prior to data sharing
 """
 def flag_redcap_phi(study_key, outdir, password, from_date):
 	# get redcap dataframe (from API) and filter out rows we've checked previously (via optional date param)
@@ -49,11 +58,7 @@ def flag_redcap_phi(study_key, outdir, password, from_date):
 	lookup_string = '|'.join({ x for x in filter(str.isalpha, lut.to_string().split()) }) # create regex compatible match string with names
 
 	print('beginning checks...')
-	for col in df.columns:
-		# for each column, search for a name surrounded by word boundaries or followed by possessive 
-		#	extra checks are to ensure names that are common word prefixes or contractions don't get picked up (otherwise lots of extra fields to check)
-		df[col] = df[col].apply(lambda x: x if pd.notnull(x) and re.search(r'\b({})(\s|\'s)'.format(lookup_string), str(x), flags=re.IGNORECASE) else np.nan)
-	df = df.dropna(how='all', axis=1).dropna(how='all', axis=0) # drop row and columns that are completely empty (again, limits what needs to be visually checked)
+	df = check_phi(df, lookup_string)
 
 	df.to_csv(os.path.join(outdir, '{}_phi_issues.csv'.format(study_key))) # save to file
 
