@@ -1,5 +1,6 @@
 import csv
 import numpy as np
+import os.path
 import pandas as pd
 import re
 import win32com.client
@@ -13,14 +14,13 @@ from enum import Enum
 from getpass import getuser, getpass
 from gooey import Gooey, GooeyParser
 from itertools import chain
-from os.path import dirname, exists, join, realpath
 
 BASE_PATH = r'C:\Users\{}\Box\Black_lab\projects\TS\New Tics R01\Data'.format(getuser())
-CONVERSION_DIR = join(BASE_PATH, 'NIH Data Archive', 'conversion')
-DATA_DICT_PATH = join(BASE_PATH, 'REDCap', 'REDCap_data_dictionaries', 'NewTicsR01_DataDictionary_2019-10-15.csv')
-FORM_MAP_PATH = join('cfg', '2692.MappingKey.xlsx')
-GUID_PATH = join(BASE_PATH, r'NIMH GUID\GUIDs.xlsx')
-OUTDIR = join(CONVERSION_DIR, 'import_forms')
+CONVERSION_DIR = os.path.join(BASE_PATH, 'NIH Data Archive', 'conversion')
+DATA_DICT_PATH = os.path.join(BASE_PATH, 'REDCap', 'REDCap_data_dictionaries', 'NewTicsR01_DataDictionary_2019-10-15.csv')
+FORM_MAP_PATH = os.path.join('cfg', '2692.MappingKey.xlsx')
+GUID_PATH = os.path.join(BASE_PATH, r'NIMH GUID\GUIDs.xlsx')
+OUTDIR = os.path.join(CONVERSION_DIR, 'import_forms')
 
 WITHHOLD = [ 'incl_excl_ic', 'incl_excl_who', 'incl_excl_new_tics_grp', 'share_data_permission', 'share_data_comments',
     'r01_survey_consent', 'demo_dob', 'childs_age', 'incl_excl_fon_scrn', 'dna_sample_lab_id', 'cbcl_birthdate', 'mo3fupc_who',
@@ -225,7 +225,7 @@ def update_adhdrs(temp_df, form):
 """
 CYBOCS updates -- shared between all form versions
     Add form metadata to CYBOCS (multi-form; we collect as separate forms, NIH has separate row for each form)
-    Choose most specific response from checkbox fields where we allow multiple but NIH doesn't
+    Choose most specific response from checkbox fields where we allow multiple but NIH doesn't (changes here because form-version specific)
 """
 def update_cybocs(temp_df, form):
     if form in ['expert_cybocs_symptoms', 'cybocs_12mo']:
@@ -279,7 +279,7 @@ Input params:
     update_func - form-specific function to call after splitting (i.e. update_ygtss, update_adhdrs, etc.)
 """
 def split_multiform_row(form_dd_df, nih_form, form_df, update_func):
-    nih_dd_df = pd.read_csv(join(CONVERSION_DIR, 'nih_dd', nih_form + '_definitions.csv'), usecols=['ElementName', 'Aliases'])     # read in NIH data dictionary
+    nih_dd_df = pd.read_csv(os.path.join(CONVERSION_DIR, 'nih_dd', nih_form + '_definitions.csv'), usecols=['ElementName', 'Aliases'])     # read in NIH data dictionary
     result = None
     redcap_forms = form_dd_df['form'].unique() # get all REDCap forms that map to NIH form
     for form in redcap_forms:
@@ -334,8 +334,8 @@ def format_date_str(date_series):
 
 def get_redcap_df(guid_df, nt_file=None, r01_file=None, api_db_password=None):
     nt_fields = ['visit_date', 'demo_sex', 'demo_dob']
-    nt_df = common.get_project_df(guid_df, 'nt', nt_file, api_db_password, nt_fields)
-    r01_df = common.get_project_df(guid_df, 'r01', nt_file, api_db_password)
+    nt_df = common.get_project_df('nt', nt_file, api_db_password, nt_fields)
+    r01_df = common.get_project_df('r01', nt_file, api_db_password)
 
     all_data_df = common.merge_projects(nt_df, r01_df)
     all_data_df = all_data_df.dropna(how='all')
@@ -370,7 +370,7 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
 
     drop_cols = [ col for pattern in WITHHOLD for col in all_data_df.columns if re.match(pattern, col) ]
 
-    replace_df = pd.read_csv(join(CONVERSION_DIR, 'item_level_replacements.csv'))
+    replace_df = pd.read_csv(os.path.join(CONVERSION_DIR, 'item_level_replacements.csv'))
 
     # convert all checkboxes to labels
     checkbox_fields = data_dict_df[data_dict_df['type'] == 'checkbox'].index
@@ -394,8 +394,8 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
     for form in nih_forms:
         required_fields = [ 'subjectkey', 'visit_date', 'interview_age', 'demo_sex'] # fields shared by every NIH form
 
-        upload_file = join(OUTDIR, form + '.csv')
-        if not redo and exists(upload_file):
+        upload_file = os.path.join(OUTDIR, form + '.csv')
+        if not redo and os.path.exists(upload_file):
             continue
 
         # write NIH header for submission file (nih form name, nih form version)
@@ -416,8 +416,9 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
             keep_cols += form_field_map[form]
         form_df = all_data_df[np.unique(keep_cols)].reset_index()
 
+
         # remove empty rows
-        subset = [ col for col in form_cols if col not in WITHHOLD ]
+        subset = [ col for col in form_cols if col not in WITHHOLD + required_fields ]
         if form != 'tsp01': # since we're joining to a different csv for tsp + most subjects do not have new form data, we cannot drop here
             form_df = form_df.dropna(how='all', subset=subset)
 
@@ -570,6 +571,7 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
             form_df = split_multiform_row(form_dd_df, form, form_df, update_cybocs)
             for col in [ col for col in form_df if 'spec' in col ]:
                 form_df[col] = form_df[col].apply(lambda x: x[:100] if pd.notnull(x) else x)
+            form_df['ocd_aware'] = form_df['ocd_aware'].replace('2;3', '2') # question is when does child *first* become aware; 'at start' (2) comes before 'during' (3)
 
         # tic_outcome_data01
         #   recode no=0, yes=1 for consistency
@@ -652,7 +654,7 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
                 adhd_type_df = form_df[adhd_type_cols + [ col for col in form_df.columns if not col.startswith('ksads5') ]]
                 adhd_type_df.assign(sldc153=idx, sldc153c=idx)
                 adhd_type_df['visit_date'] = format_date_str(adhd_type_df['visit_date'])
-                adhd_type_file = join(OUTDIR, 'sldc01_adhd_{}.csv'.format(type))
+                adhd_type_file = os.path.join(OUTDIR, 'sldc01_adhd_{}.csv'.format(type))
                 with open(adhd_type_file, 'w', newline='') as f:
                     writer = csv.writer(f)
                     writer.writerow(list(re.match('(\w+)(\d{2}$)', form).groups()))
@@ -664,17 +666,19 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
         #   comment field anyways), drop completely empty rows after merge
         if form == 'tsp01':
             drz_score_cols = ['demo_study_id', 'version_form', 'session', 'condition', 'tic_freq', 'tsp_tfi', 'duration', 'data_file1', 'notes']
-            drz_score_df = pd.read_csv(join(BASE_PATH, 'TSP', 'drz_output.csv'), skiprows=0, names=drz_score_cols)
+            drz_score_df = pd.read_csv(os.path.join(BASE_PATH, 'TSP', 'drz_output.csv'), skiprows=0, names=drz_score_cols)
             print(drz_score_df)
             drz_score_df['version_form'] = drz_score_df['version_form'].replace(['screen'] + [ str(d) + 'mo' for d in [3,12,24,36,48,60] ], event_name_renames)
 
             form_df = form_df.merge(drz_score_df, on=['demo_study_id', 'version_form'], how='left')
             form_df['int_dur'] = 10 # duration of tic-free intervals
             form_df['version_form'] = form_df[['version_form', 'condition', 'session']].apply(lambda x: '; '.join(x.astype(str)), axis=1)
+            form_df['data_file1'] = form_df['data_file1'].astype(str).apply(lambda x: os.path.basename(x)) # filename only since on same path as submission forms and path contains userid
             form_df = form_df.drop(columns=['condition', 'session', 'duration', 'notes'])
             form_df = form_df.rename(columns={'drz_tics': 'comments'})
 
             form_df = form_df.dropna(how='all', subset=[col for col in subset + ['tic_freq', 'tsp_tfi', 'data_file1'] if col in form_df])
+
 
         # replace specific items that are known to be problematic / missing (documented in cfg/item_level_replacements spreadsheet)
         form_replace_df = replace_df[replace_df['form'] == form]
