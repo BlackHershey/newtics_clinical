@@ -1,0 +1,15 @@
+argparse
+beautifulsoup4
+chardet
+cx_Freeze
+datefinder
+gooey
+matplotlib
+numpy
+pandas
+PyCap
+pylint
+pyodbc
+pywin32
+requests
+sklearn
