@@ -335,7 +335,7 @@ def format_date_str(date_series):
 def get_redcap_df(guid_df, nt_file=None, r01_file=None, api_db_password=None):
     nt_fields = ['visit_date', 'demo_sex', 'demo_dob']
     nt_df = common.get_project_df('nt', nt_file, api_db_password, nt_fields)
-    r01_df = common.get_project_df('r01', nt_file, api_db_password)
+    r01_df = common.get_project_df('r01', r01_file, api_db_password)
 
     all_data_df = common.merge_projects(nt_df, r01_df)
     all_data_df = all_data_df.dropna(how='all')
