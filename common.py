@@ -17,7 +17,7 @@ def get_redcap_project(study_name, password):
 		)
 		conn = pyodbc.connect(conn_str)
 	except pyodbc.Error:
-		exit('Error connecting to access database')
+		exit('Error connecting to API token access database')
 
 	cursor = conn.cursor()
 	sql = 'SELECT api_token FROM {}_api_tokens WHERE userid = ?'.format(study_name)
@@ -44,10 +44,13 @@ def merge_projects(df1, df2):
 
 def get_project_df(project_name, datafile=None, api_db_password=None, fields=None):
 	if datafile:
+		print('GET_PROJECT_DF FOR {} USING CSV {}'.format(project_name,datafile))
 		df = pd.read_csv(datafile, index_col=[0,1])
 		if fields:
+			print('USING CUSTOM FIELD LIST')
 			df = df[fields]
 	else:
+		print('PULLING DATA FROM REDCAP FOR {}'.format(project_name))
 		redcap_project = get_redcap_project(project_name, api_db_password)
 		df = redcap_project.export_records(fields=fields, format='df')
 	return df

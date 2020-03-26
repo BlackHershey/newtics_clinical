@@ -25,12 +25,12 @@ def get_phi_lut(password):
 		)
 		conn = pyodbc.connect(conn_str)
 	except pyodbc.Error:
-		sys.stderr.write('Error connecting to access database')
+		sys.stderr.write('Error connecting to Recruitment access database')
 		sys.exit(1)
 
 	sql = 'SELECT Contacts.FirstName, Contacts.LastName, Contacts.Guardian1name, Contacts.Guardian2name' + \
 			' FROM Contacts' + \
-			' WHERE Contacts.NewTicsID IS NOT NULL';
+			' WHERE Contacts.NewTicsID IS NOT NULL'
 	return pd.read_sql(sql, conn)
 
 
