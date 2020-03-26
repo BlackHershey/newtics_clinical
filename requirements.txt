@@ -13,3 +13,5 @@ pyodbc
 pywin32
 requests
 sklearn
+subprocess32
+xlrd
