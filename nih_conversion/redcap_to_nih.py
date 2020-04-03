@@ -26,6 +26,10 @@ WITHHOLD = [ 'incl_excl_ic', 'incl_excl_who', 'incl_excl_new_tics_grp', 'share_d
     'r01_survey_consent', 'demo_dob', 'childs_age', 'incl_excl_fon_scrn', 'dna_sample_lab_id', 'cbcl_birthdate', 'mo3fupc_who',
     r'\w*_data_files*$', 'age_at_visit', 'visit_referral_source' ]
 
+# These are subjects who were enrolled duirng the pre-R01 study, but also are enrolled in the R01 study and have data in the R01 study.
+# We use their data from the "old" database for the demographics form.
+PRE_R01_SUBJECTS = ['NT736', 'NT738', 'NT805', 'NT806', 'NT807', 'NT808', 'NT809', 'NT810', 'NT812', 'NT814', 'NT816', 'NT817']
+
 CHECKBOX_TO_LABEL = [ 'incl_excl_concom_meds', 'demo_race'] # checkbox fields that will need to expanded into concatenated label string
 OTHER_LABELS_NEEDED = [ r'demo_\w*_mari', r'srs_800_q\d+', 'pedsql_version', 'ksads5_asd_specify' ] # other fields to concatenate label strings
 
@@ -333,10 +337,32 @@ def format_date_str(date_series):
 
 
 def get_redcap_df(guid_df, nt_file=None, r01_file=None, api_db_password=None):
+    # these are the fields from the "old" database that we need to merge with the new R01 database
     nt_fields = ['visit_date', 'demo_sex', 'demo_dob']
+    demo_fields = ['demo_childs_edu','demo_completed_by','demo_ethnicity','demo_mat_edu','demo_maternal_mari','demo_pat_edu','demo_patern_mari','demo_prim_lang','demo_race', 'demo_secondary_language', 'gender','handedness']
+    nt_fields = nt_fields.append(demo_fields)
     nt_df = common.get_project_df('nt', nt_file, api_db_password, nt_fields)
     r01_df = common.get_project_df('r01', r01_file, api_db_password)
 
+    # drop screen visit arm for pre-R01 subjects from R01 df (since we're getting that from the pre-R01 df)
+    # AND keep only screen data from pre-R01 subjects in the old df
+    drop_tuples = []
+    keep_tuples = []
+    for sub in PRE_R01_SUBJECTS:
+        drop_tuples.append((sub, 'screening_visit_arm_1'))
+        keep_tuples.append((sub, 'initial_screen_arm_1'))
+    r01_drop_mask = r01_df.index.isin(drop_tuples)
+    r01_df = r01_df[~r01_drop_mask]
+    nt_keep_mask = nt_df.index.isin(keep_tuples)
+    nt_df = nt_df[nt_keep_mask]
+
+    # rename nt screen visits
+    nt_df = nt_df.rename(index={'initial_screen_arm_1':'screening_visit_arm_1'})
+
+    # make subjects NT736 through NT817 "NewTics" group
+    nt_df['incl_excl_grp'] = 1
+
+    # merge pre-R01 and R01 data
     all_data_df = common.merge_projects(nt_df, r01_df)
     all_data_df = all_data_df.dropna(how='all')
     all_data_df = all_data_df.join(guid_df, how='inner')
@@ -696,7 +722,8 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
             # assume ages (other than ones in mab01 which ask for intended unit) will be reported in years
             form_df[age_to_months_cols] = form_df[age_to_months_cols].apply(age_to_units, args=(AgeUnits.MONTHS, AgeUnits.YEARS), axis=1)
 
-        form_df = form_df[form_df['visit_date'] > datetime(2017, 8, 1)] # remove pre-R01 rows
+        if form not in 'socdem01':
+            form_df = form_df[form_df['visit_date'] > datetime(2017, 8, 1)] # remove pre-R01 rows
 
         form_df['visit_date'] = format_date_str(form_df['visit_date']) # (after all date comparisons) revert visit date to required string format
 
