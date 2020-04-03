@@ -32,7 +32,7 @@ def summarize_scan_stats(outdir):
     scan_visits = []
     files = glob(os.path.join(BIDS_DIR, 'sub-*', 'ses-*', '*_scans.tsv'))
     for f in files:
-        sub, ses = re.search('(sub-\w+)_ses-(\w+)_', f).groups()
+        sub, ses = re.search(r'(sub-\w+)_ses-(\w+)_', f).groups()
         if ses[-1] in ['2','3']: # hack to skip repeat scan day sessions 
             continue 
         scan_date = np.genfromtxt(f, usecols=[1], skip_header=1, dtype=np.datetime64)[0]

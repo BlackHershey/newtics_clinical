@@ -30,7 +30,7 @@ ANXIETY_DISORDERS = [ ('pd', 'panic', 'Panic Disorder'), ('sad', 'sepanxiety', '
 	('agor', 'agoraphobia', 'Agoraphobia'), ('oad', None, 'Overanxious Disorder'), ('gad', None, 'Generalized Anxiety Disorder') ]
 
 
-ALPHA_ONLY = re.compile('([^\sa-zA-Z]|_)+')
+ALPHA_ONLY = re.compile(r'([^\sa-zA-Z]|_)+')
 
 def rename_events(df, study_vars):
 	# rename columns to be more friendly for flattened (all events on one row) display
@@ -61,7 +61,7 @@ def get_matching_columns(columns, pattern):
 # 	-- for handling 'ever_had' that spans multiple sessions (need to ensure chronological order of events)
 def event_sort(column):
 	event_name = column.rsplit('_', 1)[1]
-	return [ int(s) if s.isdigit() else 0 for s in re.split('(\d+)', event_name) ]
+	return [ int(s) if s.isdigit() else 0 for s in re.split(r'(\d+)', event_name) ]
 
 
 def multi_session_ever_had(df, characteristic):
@@ -139,7 +139,7 @@ def score_puts(puts_df):
 def apply_dci_scoring_strategy(row, columns, scorable_columns, multiplier_map):
 	suppress_col = 'dci_attempts_to_suppress_tics'
 
-	scorable_complete_cols = [ col for col in columns if re.search('\w*ts_dci\w*complete', col) ]
+	scorable_complete_cols = [ col for col in columns if re.search(r'\w*ts_dci\w*complete', col) ]
 	if pd.notnull(row[scorable_columns]).any():
 		row[suppress_col] = row['ts_dci_score_16'] == 1
 		row['dci_total'] = row[scorable_columns].sum() # for newer participants multipliers are built-in - can simply sum responses
@@ -159,7 +159,7 @@ def apply_dci_scoring_strategy(row, columns, scorable_columns, multiplier_map):
 
 
 def score_dci(dci_df, study_vars):
-	scorable_columns = get_matching_columns(dci_df, '^ts_dci_score_\d+$')
+	scorable_columns = get_matching_columns(dci_df, r'^ts_dci_score_\d+$')
 
 	# generate mapping of question to multiplier for scoring (for participants who joined prior to scorable form creation)
 	multipliers = [15, 5, 5, 5, 7, 12, 4, 7, 1, 2, 2, 2, 4, 1, 1, 1, 2, 4, 1, 2, 2, 4, 2, 2, 2, 4, 1]
@@ -279,7 +279,7 @@ def score_ksads(ksads_df):
 	ksads_df['ksads_all_diagnoses'] = ksads_df[all_episode_columns].apply(get_ksads_diagnoses, args=(data_dict_df,), axis=1)
 	ksads_df['ksads_anxiety_diagnoses'] = ksads_df[anxiety_episode_cols].apply(get_ksads_diagnoses, args=(data_dict_df,), axis=1)
 
-	tic_columns = get_matching_columns(all_episode_columns, 'ksads\w*_(ts|cmvtd|ttd)_\w*')
+	tic_columns = get_matching_columns(all_episode_columns, r'ksads\w*_(ts|cmvtd|ttd)_\w*')
 	ksads_df = ever_had('adhd_ever', ksads_df, adhd_episode_cols)
 	ksads_df = ever_had('ocd_ever', ksads_df, ocd_episode_cols)
 	ksads_df = ever_had('other_anxiety_disorder_ever', ksads_df, anxiety_episode_cols)
@@ -304,7 +304,7 @@ def score_srs(srs_df, sex_df):
 	dd = r'C:\Users\{}\Box\Black_Lab\projects\TS\NewTics\Data\REDCap\SRS_800_datadictionary.csv'.format(getuser())
 	response_mappings = parse_data_dictionary(dd)
 
-	srs_700_columns = get_matching_columns(srs_df.columns, 'srs_q\d{1,2}')
+	srs_700_columns = get_matching_columns(srs_df.columns, r'srs_q\d{1,2}')
 
 	for idx, col in enumerate(srs_700_columns):
 		srs_df[col].replace(response_mappings[idx], inplace=True)
@@ -402,22 +402,22 @@ def score_redcap_data(study_name, api_db_password=None, nt_file=None, r01_file=N
 	demo_df = demo_df.apply(score_demographics, axis=1)
 	demo_df['age'] = (df['visit_date'] - pd.to_datetime(df['demo_dob'])).apply(lambda x: x.days / 365)
 
-	ygtss_df = score_ygtss(df[get_matching_columns(df.columns, '^ygtss.+\d+$')].copy())
+	ygtss_df = score_ygtss(df[get_matching_columns(df.columns, r'^ygtss.+\d+$')].copy())
 	expert_dx_df = score_expert_rated_diagnoses(df[get_matching_columns(df.columns, '^expert_diagnosis')].copy())
 
 	ses_df = score_ses(df[get_matching_columns(df.columns, '^ses')].copy())
-	adhd_df = score_adhd(df[get_matching_columns(df.columns, '^adhd.+\d+$')].copy())
-	cybocs_df = score_cybocs(df[get_matching_columns(df.columns, '^cybocs.+\d+$')].copy())
-	puts_df = score_puts(df[get_matching_columns(df.columns, '^puts.+\d+$')].copy())
+	adhd_df = score_adhd(df[get_matching_columns(df.columns, r'^adhd.+\d+$')].copy())
+	cybocs_df = score_cybocs(df[get_matching_columns(df.columns, r'^cybocs.+\d+$')].copy())
+	puts_df = score_puts(df[get_matching_columns(df.columns, r'^puts.+\d+$')].copy())
 	dci_df = score_dci(df[get_matching_columns(df.columns, 'ts_(dci|diagnostic_confidence_index)')].copy(), study_vars) # include both dci column sets
-	edinburgh_df = score_edinburgh(df[get_matching_columns(df.columns, '^edinburgh.+\d+$')].copy())
+	edinburgh_df = score_edinburgh(df[get_matching_columns(df.columns, r'^edinburgh.+\d+$')].copy())
 	# need dominant hand from edinburgh frame to map pegboard to handedness
-	pegboard_frames = [df[get_matching_columns(df.columns, '^peg.+\d+s$')].copy(), edinburgh_df['dominant_hand']]
+	pegboard_frames = [df[get_matching_columns(df.columns, r'^peg.+\d+s$')].copy(), edinburgh_df['dominant_hand']]
 	peg_df = score_pegboard(pd.concat(pegboard_frames, axis=1))
 
 	ksads_df = score_ksads(df[get_matching_columns(df.columns, '^ksads')].copy())
 	srs_df = score_srs(df[get_matching_columns(df.columns, '^srs')].copy(), demo_df['sex'])
-	pedqol_df = score_pedqol(df[get_matching_columns(df.columns, '^pedsql.+\d+$')].copy())
+	pedqol_df = score_pedqol(df[get_matching_columns(df.columns, r'^pedsql.+\d+$')].copy())
 
 	outcome_df = df[get_matching_columns(df.columns, '^outcome_data_(2|4|5|11)')].copy()
 	outcome_df.columns = ['outcome_tics_past_week', 'outcome_doctor', 'outcome_positive_exam', 'outcome_any_3mo_tic_free']
@@ -427,7 +427,7 @@ def score_redcap_data(study_name, api_db_password=None, nt_file=None, r01_file=N
 	result = pd.concat(frames, axis=1)
 
 	result['kbit_iq'] = df['kbit_iq']
-	result['medications'] = df[get_matching_columns(df.columns, '^med_medication_\d')].apply(lambda x: x.str.cat(sep='; ') if pd.notnull(x).any() else np.nan, axis=1)
+	result['medications'] = df[get_matching_columns(df.columns, r'^med_medication_\d')].apply(lambda x: x.str.cat(sep='; ') if pd.notnull(x).any() else np.nan, axis=1)
 	result['group'] = df['incl_excl_grp'].replace([1,2,3], ['NT', 'TS', 'HC'])
 
 	# store NTIDs of subjects that have intial screen extra data - need later to fill in screen gaps for these subjects
@@ -442,7 +442,7 @@ def score_redcap_data(study_name, api_db_password=None, nt_file=None, r01_file=N
 	# get all screen rows of original df (and drop event name from index)
 	# 	will be used to calculate things relevant to screen only in flattened df
 	screen_only_df = df.xs('screen', level=EVENT_NAME)
-	result['1st_relative_with_tics'] = screen_only_df[get_matching_columns(df.columns, '(fh|mafh)\w*_(father|mother|sister|brother)_mvoa.*(1|2)')].sum(axis=1, min_count=1) > 0
+	result['1st_relative_with_tics'] = screen_only_df[get_matching_columns(df.columns, r'(fh|mafh)\w*_(father|mother|sister|brother)_mvoa.*(1|2)')].sum(axis=1, min_count=1) > 0
 	onset_df = screen_only_df[['expert_diagnosis_onset', 'visit_date']].apply(determine_tic_onset, axis=1)
 	result.insert(0, 'tic_onset_date', onset_df['tic_onset_date'])
 	result.insert(1, 'days_since_onset_screen', determine_days_since_onset(screen_only_df['visit_date'], result['tic_onset_date']))

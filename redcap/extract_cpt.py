@@ -35,7 +35,7 @@ def extract_cpt(study_name, use_existing=False):
 	if use_existing:
 		return pd.read_csv(outfile).set_index(INDEX_COLS)[summary_columns]
 
-	filename_format = '((NT\d{3})_(K?CPT)\w*.xlsx?)' # matches files beginning with NT<id>_KCPT and NT<id>_CPT
+	filename_format = r'((NT\d{3})_(K?CPT)\w*.xlsx?)' # matches files beginning with NT<id>_KCPT and NT<id>_CPT
 	search_res = [ re.match(filename_format, f, flags=re.IGNORECASE) for f in listdir(indir) ]
 	excel_files = [ s.groups() for s in search_res if s ]
 

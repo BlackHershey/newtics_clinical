@@ -14,10 +14,10 @@ RESULT_OUTPUT_FILE = 'drz_output.csv'
 CHECK_OUTPUT_FILE_PREFIX = 'drz_missing_and_extra_data'
 INDEX_COLS = ['demo_study_id', 'event_name']
 
-DEFAULT_FILENAME_FORMAT = 'NT\d{3}_(screen|\d{2}mo)_session\d{1}\w{0,1}_(baseline|verbal|DRZ|NCR)_TicTimer_log.txt'
+DEFAULT_FILENAME_FORMAT = r'NT\d{3}_(screen|\d{2}mo)_session\d{1}\w{0,1}_(baseline|verbal|DRZ|NCR)_TicTimer_log.txt'
 
 def extract_time(line):
-	time_str = re.search('\d{2}:\d{2}:\d{2}', line).group()
+	time_str = re.search(r'\d{2}:\d{2}:\d{2}', line).group()
 	return datetime.strptime(time_str, '%H:%M:%S')
 
 
@@ -61,14 +61,14 @@ def parse_drz(indir, filename_format, nested, use_existing, check_missing):
 					total_tics.append(0)
 					total_rewards.append(0)
 					tic_time.append(0)
-			if  re.search('Session \w+ ended at', line):
+			if  re.search(r'Session \w+ ended at', line):
 				if len(start_times) < len(end_times):
 					start_times.append(None)
 				end_times.append(extract_time(line))
 			if 'Tic detected' in line:
 				total_tics[len(total_tics)-1] += 1
 				if 'Lite' in filename:
-					time2 = int(re.search('(\d+) ms', line).group(1))
+					time2 = int(re.search(r'(\d+) ms', line).group(1))
 					total_rewards[len(total_rewards)-1] += (time2 - tic_time[len(total_rewards)-1]) // 10000
 					tic_time[len(total_rewards)-1] = time2
 

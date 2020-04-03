@@ -24,12 +24,12 @@ OUTDIR = os.path.join(CONVERSION_DIR, 'import_forms')
 
 WITHHOLD = [ 'incl_excl_ic', 'incl_excl_who', 'incl_excl_new_tics_grp', 'share_data_permission', 'share_data_comments',
     'r01_survey_consent', 'demo_dob', 'childs_age', 'incl_excl_fon_scrn', 'dna_sample_lab_id', 'cbcl_birthdate', 'mo3fupc_who',
-    '\w*_data_files*$', 'age_at_visit', 'visit_referral_source' ]
+    r'\w*_data_files*$', 'age_at_visit', 'visit_referral_source' ]
 
 CHECKBOX_TO_LABEL = [ 'incl_excl_concom_meds', 'demo_race'] # checkbox fields that will need to expanded into concatenated label string
-OTHER_LABELS_NEEDED = [ 'demo_\w*_mari', 'srs_800_q\d+', 'pedsql_version', 'ksads5_asd_specify' ] # other fields to concatenate label strings
+OTHER_LABELS_NEEDED = [ r'demo_\w*_mari', r'srs_800_q\d+', 'pedsql_version', 'ksads5_asd_specify' ] # other fields to concatenate label strings
 
-NUMBER_PATTERN = '(\d+(?:\.\d+)?)' # regex for numbers only string (both int and float)
+NUMBER_PATTERN = r'(\d+(?:\.\d+)?)' # regex for numbers only string (both int and float)
 
 class AgeUnits(Enum):
     YEARS = 0
@@ -66,9 +66,9 @@ Consolidate checkbox responses into one variable
 """
 def replace_checkbox_with_label(df, data_dict_df, variable, use_label=False):
     num_to_label_map = get_data_dict_options_map(df, data_dict_df, variable)
-    checkbox_cols = get_matching_cols(df, variable + '___\d+') # get all columns that correspond to variable
+    checkbox_cols = get_matching_cols(df, variable + r'___\d+') # get all columns that correspond to variable
     for col in checkbox_cols:
-        checkbox_num = re.search('___(\d+)', col).group(1) 
+        checkbox_num = re.search(r'___(\d+)', col).group(1) 
         replace1 = num_to_label_map[int(checkbox_num)] if use_label else checkbox_num # optionally replace number with label 
         df[col] = df[col].replace([0, 1], [np.nan, replace1]) # swap in expected values
         df[col] = df[col].replace('None of the above', np.nan)
@@ -401,7 +401,7 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
         # write NIH header for submission file (nih form name, nih form version)
         with open(upload_file, 'w', newline='') as f:
             writer = csv.writer(f)
-            writer.writerow(list(re.match('(\w+)(\d{2}$)', form).groups()))
+            writer.writerow(list(re.match(r'(\w+)(\d{2}$)', form).groups()))
 
         redcap_forms = list(form_map_df.xs(form).values.flatten()) # get all REDCap forms associated with current NIH form
         print('NIH_FORM = {}, REDCAP_FORMS = {}'.format(form, redcap_forms))
@@ -496,14 +496,14 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
         # tichist01 (family history)
         #   remove relative_ from fh columns to fit within character limit
         if form == 'tichist01':
-            relative_renames = { col: col.replace('relative_', '') for col in form_df.columns if re.match('fh_\w+_other_relative_relationship_800', col) }
+            relative_renames = { col: col.replace('relative_', '') for col in form_df.columns if re.match(r'fh_\w+_other_relative_relationship_800', col) }
             form_df =  form_df.rename(relative_renames, axis=1)
 
         # srs02
         #   map question responses to actual values (not scores), create separate gender norm columns for scores and rename, add columns
         #   for who completed form (taken from demo_completed_by field)
         if form == 'srs02':
-            srsq_cols = get_matching_cols(form_df, 'srs_800_q\d+')
+            srsq_cols = get_matching_cols(form_df, r'srs_800_q\d+')
             form_df[srsq_cols] = form_df[srsq_cols].apply(lambda x: x.str[0], axis=1)
             raw_score_cols = [ 'srs_awareness', 'srs_cognition', 'srs_communication', 'srs_motivation', 'srs_mannerisms', 'srs_total' ]
             tscore_cols = [ col + '_t' for col in raw_score_cols ]
@@ -524,7 +524,7 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
         # pedsql01
         #   replace version numeric code with string representing version, decrement question scale to 0-4
         if form == 'pedsql01':
-            q_cols = get_matching_cols(form_df, 'pedsql_\w*_\d')
+            q_cols = get_matching_cols(form_df, r'pedsql_\w*_\d')
             form_df[q_cols] = form_df[q_cols] - 1
             form_df['pedsql_version'] = form_df['pedsql_version'].apply(lambda x: 'Version for Ages ' + x if pd.notnull(x) else np.nan)
 
@@ -636,7 +636,7 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
         # cptc01
         #   Rename cols to fit within col name limits
         if form == 'cptc01':
-            rename_cols = [ col for col in form_df.columns if re.match('cpt_hit\w*_change_guideline$', col) ]
+            rename_cols = [ col for col in form_df.columns if re.match(r'cpt_hit\w*_change_guideline$', col) ]
             form_df = form_df.rename(columns={ col: col.replace('cpt_', '') for col in rename_cols })
 
             form_df['cpt_type'] = np.where(form_df['interview_age'] >= 72, 1, 2) # set assessment to KCPT if age < 6
@@ -657,7 +657,7 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
                 adhd_type_file = os.path.join(OUTDIR, 'sldc01_adhd_{}.csv'.format(type))
                 with open(adhd_type_file, 'w', newline='') as f:
                     writer = csv.writer(f)
-                    writer.writerow(list(re.match('(\w+)(\d{2}$)', form).groups()))
+                    writer.writerow(list(re.match(r'(\w+)(\d{2}$)', form).groups()))
                 adhd_type_df.to_csv(adhd_type_file, mode='a', index=False, float_format='%g')
                 form_df = form_df.drop(columns=adhd_type_cols)
 
@@ -690,7 +690,7 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
             ] = row['new_value']
 
         # convert all text-field ages to months
-        age_to_months_cols = [ col for col in form_df.columns if re.match('(matern|ksads|ksads5|fh)(_\w*)*_age', col) and \
+        age_to_months_cols = [ col for col in form_df.columns if re.match(r'(matern|ksads|ksads5|fh)(_\w*)*_age', col) and \
             col not in list(form_dd_df[form_dd_df['type'] == 'radio'].index.values) ]
         if age_to_months_cols:
             # assume ages (other than ones in mab01 which ask for intended unit) will be reported in years
