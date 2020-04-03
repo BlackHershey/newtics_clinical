@@ -47,7 +47,6 @@ def get_project_df(project_name, datafile=None, api_db_password=None, fields=Non
 		print('GET_PROJECT_DF FOR {} USING CSV {}'.format(project_name,datafile))
 		df = pd.read_csv(datafile, index_col=[0,1])
 		if fields:
-			print('USING CUSTOM FIELD LIST')
 			df = df[fields]
 	else:
 		print('PULLING DATA FROM REDCAP FOR {}'.format(project_name))

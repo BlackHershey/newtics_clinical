@@ -404,7 +404,7 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
             writer.writerow(list(re.match('(\w+)(\d{2}$)', form).groups()))
 
         redcap_forms = list(form_map_df.xs(form).values.flatten()) # get all REDCap forms associated with current NIH form
-        print(form, redcap_forms)
+        print('NIH_FORM = {}, REDCAP_FORMS = {}'.format(form, redcap_forms))
 
         # Get columns in REDCap forms
         form_dd_df = data_dict_df[data_dict_df['form'].isin(redcap_forms)]
