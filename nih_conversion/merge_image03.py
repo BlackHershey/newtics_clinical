@@ -11,7 +11,7 @@ from getpass import getuser, getpass
 from gooey import Gooey, GooeyParser
 
 study_dir = r'\\neuroimage\nil\black\NewTics'
-box_dir = r'C:\Users\{}\Box\Black_Lab\projects\TS\New Tics R01\Data\NIH Data Archive\conversion\import_forms'.format(getuser())
+box_dir = r'C:\Users\{}\Box\Black_Lab\projects\TS\New_Tics_R01\Data\NIH Data Archive\conversion\import_forms'.format(getuser())
 
 """
 Create final image03 submission file

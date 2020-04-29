@@ -274,7 +274,7 @@ def score_ksads(ksads_df):
 
 	data_dict_df = pd.concat([
 		pd.read_csv(r'C:\Users\{}\Box\Black_Lab\projects\TS\NewTics\Data\REDCap\NewTics_DataDictionary_2016-03-08.csv'.format(getuser())),
-		pd.read_csv(r'C:\Users\{}\Box\Black_Lab\projects\TS\New Tics R01\Data\REDCap\REDCap_data_dictionaries\NewTicsR01_DataDictionary_2019-10-15.csv'.format(getuser()))
+		pd.read_csv(r'C:\Users\{}\Box\Black_Lab\projects\TS\New_Tics_R01\Data\REDCap\REDCap_data_dictionaries\NewTicsR01_DataDictionary_2019-10-15.csv'.format(getuser()))
 	])
 	ksads_df['ksads_all_diagnoses'] = ksads_df[all_episode_columns].apply(get_ksads_diagnoses, args=(data_dict_df,), axis=1)
 	ksads_df['ksads_anxiety_diagnoses'] = ksads_df[anxiety_episode_cols].apply(get_ksads_diagnoses, args=(data_dict_df,), axis=1)
