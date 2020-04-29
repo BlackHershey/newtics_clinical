@@ -6,6 +6,7 @@ datefinder
 gooey
 matplotlib
 numpy
+openpyxl
 pandas
 PyCap
 pylint
