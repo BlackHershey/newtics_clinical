@@ -4,6 +4,7 @@ chardet
 cx_Freeze
 datefinder
 gooey
+lxml
 matplotlib
 numpy
 openpyxl
