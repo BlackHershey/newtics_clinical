@@ -8,7 +8,7 @@ import utils
 from getpass import getuser
 from glob import glob
 
-BIDS_DIR = r'\\linux5\\data\cn6\soyoung\NewTics\BIDS'
+BIDS_DIR = r'\\linux5.neuroimage.wustl.edu\\data\cn6\soyoung\NewTics\BIDS'
 
 def gen_participants_tsv(analysis_dir):
     bidsfile = os.path.join(BIDS_DIR, 'participants.tsv')

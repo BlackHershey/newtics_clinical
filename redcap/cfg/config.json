@@ -5,7 +5,7 @@
             "12_month_follow_up": "12mo"
         },
         "directories": {
-            "base": "C:\\Users\\{}\\Box\\Black_Lab\\projects\\TS\\New Tics R01\\Data",
+            "base": "C:\\Users\\{}\\Box\\Black_Lab\\projects\\TS\\New_Tics_R01\\Data",
             "input": {
                 "DRZ": "{}\\TSP",
                 "CPT": "{}\\CPT",
