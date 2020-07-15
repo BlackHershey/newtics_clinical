@@ -696,7 +696,7 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
             print(drz_score_df)
             drz_score_df['version_form'] = drz_score_df['version_form'].replace(['screen'] + [ str(d) + 'mo' for d in [3,12,24,36,48,60] ], event_name_renames)
 
-            form_df = form_df.merge(drz_score_df, on=['demo_study_id', 'version_form'], how='left')
+            form_df = form_df.merge(drz_score_df, on=['demo_study_id', 'visit'], how='inner')
             form_df['int_dur'] = 10 # duration of tic-free intervals
             form_df['version_form'] = form_df[['version_form', 'condition', 'session']].apply(lambda x: '; '.join(x.astype(str)), axis=1)
             form_df['data_file1'] = form_df['data_file1'].astype(str).apply(lambda x: os.path.basename(x)) # filename only since on same path as submission forms and path contains userid
