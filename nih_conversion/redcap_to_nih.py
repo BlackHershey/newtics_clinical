@@ -658,6 +658,8 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
             form_df['ycbcl_age_5_yn'] = form_df['ycbcl_age_5_yn'].replace(3, 4)
             for col in ['cbcl_depresspr', 'cbcl_depresspr_raw']:
                 form_df[col] = 999
+            fill_cols = ['ycbcl_q11']
+            form_df[fill_cols] = form_df[fill_cols].fillna(999)
 
         # cptc01
         #   Rename cols to fit within col name limits
