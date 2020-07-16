@@ -712,6 +712,8 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
         if form == 'endvisit01':
             # replace 3 with blank
             form_df['visit_parents_present'] = form_df['visit_parents_present'].replace('3','')
+            # replace 1;2 with 1
+            form_df['visit_parents_present'] = form_df['visit_parents_present'].replace('1;2','1')
 
 
         # replace specific items that are known to be problematic / missing (documented in cfg/item_level_replacements spreadsheet)
