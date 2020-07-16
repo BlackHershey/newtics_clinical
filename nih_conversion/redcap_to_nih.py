@@ -707,6 +707,12 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
 
             form_df = form_df.dropna(how='all', subset=[col for col in subset + ['tic_freq', 'tsp_tfi', 'data_file1'] if col in form_df])
 
+        # endvisit01
+        #   Remove "3" (legal guardian) until we ask NDAR to add it as an option for visit_parents_present
+        if form == 'endvisit01':
+            # replace 3 with blank
+            form_df['visit_parents_present'] = form_df['visit_parents_present'].replace('3','')
+
 
         # replace specific items that are known to be problematic / missing (documented in cfg/item_level_replacements spreadsheet)
         form_replace_df = replace_df[replace_df['form'] == form]
