@@ -22,6 +22,13 @@ def merge_image03(r01_file=None, api_db_password=None, to_date=None):
     image03_csv = os.path.join(study_dir, 'image03_nodemo.csv')
     image_df = pd.read_csv(image03_csv)
 
+    # replace event names
+    event_name_renames = ['Screening', '12 Month Follow-up']
+    image_df['visit'] = image_df['visit'].replace(
+        ['screening', '12month'],
+        event_name_renames
+    )
+
     # extract DOB from REDCap project (doesn't appear in any submission forms)
     dob_df = common.get_project_df('r01', r01_file, api_db_password, ['demo_dob']).reset_index()
     dob_df = dob_df[dob_df['redcap_event_name'] == 'screening_visit_arm_1']
