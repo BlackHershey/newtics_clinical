@@ -543,6 +543,9 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
             form_df['srs_score'] = np.nan
             form_df['respond_detail'] = form_df['demo_completed_by'].apply(mom_or_dad)
             form_df['respond'] = np.where(form_df['respond_detail'].isin([1,2]), 1, np.nan)
+            for col in ['respond', 'respond_detail']:
+                form_df[col] = form_df[col].replace(1.0,'1')
+                form_df[col] = form_df[col].replace(2.0,'2')
             form_df = form_df.drop(columns='demo_completed_by')
 
         # ticscreener01
@@ -665,6 +668,11 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
                 form_df[col] = 999
             fill_cols = ['ycbcl_q11']
             form_df[fill_cols] = form_df[fill_cols].fillna(999)
+            int_cols = ['ycbcl_q74', 'ycbcl_q76', 'ycbcl_q86', 'ycbcl_q92']
+            for col in int_cols:
+                form_df[col] = form_df[col].replace(0.0,'0')
+                form_df[col] = form_df[col].replace(1.0,'1')
+                form_df[col] = form_df[col].replace(2.0,'2')
 
         # cptc01
         #   Rename cols to fit within col name limits
@@ -745,7 +753,20 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
 
         # write out data to separate NIH form files
         form_df = form_df.drop(columns=drop_cols + [col for col in form_df.columns if col.endswith('_complete')], errors='ignore')
-        form_df.to_csv(upload_file, mode='a', index=False, float_format='%g')
+        if form == 'kbit_ii01':
+            int_cols = ['kbit_iq','kbit_matrices_raw','kbit_nonverbal_standard','kbit_riddles_raw','kbit_verbal_knowledge_raw', 
+                'kbit_verbal_plus_nonverbal','kbit_verbal_raw','kbit_verbal_standard']
+            for col in int_cols:
+                form_df[col] = form_df[col].astype('float64', errors='ignore')
+            print(form_df.dtypes)
+            form_df.to_csv(upload_file, mode='a', index=False, float_format='%d')
+        elif form == 'cbcl01':
+            int_cols = ['cbcl_25', 'cbcl_72', 'cbcl_83', 'cbcl_84', 'cbcl_85', 'cbcl_90', 'cbcl_105']
+            for col in int_cols:
+                form_df[col] = form_df[col].astype('float64', errors='ignore')
+            form_df.to_csv(upload_file, mode='a', index=False, float_format='%d')
+        else:
+            form_df.to_csv(upload_file, mode='a', index=False, float_format='%g')
 
     return
 
