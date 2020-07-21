@@ -455,18 +455,23 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
         for col in convert_cols:
             form_df =  replace_num_with_label(form_df, data_dict_df, col)
 
-        # handle event name column from REDCap export
-        event_name_renames = ['Screening', '3 Month Follow-up', '12 Month Follow-up'] + [ 'Clinical Follow-up ' + str(n) for n in range(1,5) ]
-        keep_event_col =  ['endvisit01', 'ticscreener01', 'mvhsp01', 'ygtss01', 'tsp01']
-        if form not in keep_event_col:
-            form_df.drop(columns='redcap_event_name', inplace=True) # all other forms do not need the 'redcap_event_name' index col, so drop it
-        else:
-            form_df['redcap_event_name'] = form_df['redcap_event_name'].replace(
-                ['screening_visit_arm_1', '3_month_follow_up_arm_1', '12_month_follow_up_arm_1'] + [ 'clinical_follow_up_arm_1' + l for l in ['', 'b', 'c', 'd'] ],
-                event_name_renames
-            )
-            rename = 'version_form' if form in keep_event_col[-2:] else 'visit' # rename "redcap_event_name" depending on form
+        ### handle event name column from REDCap export
+
+        # NOTE: As of 7/15/2020, the "visit" field is not included in the following forms
+        no_visit_forms = ['adhdrs01', 'bsmss01', 'child_sens01', 'cptc01', 'erd_tics01', 
+            'mab01', 'paness01', 'puts01', 'srs02', 'tichist01', 'tic_outcome_data01', 
+            'ts_dci01', 'wpt01', 'ygtss01']
+        event_name_renames = ['Screening', 'Initial Scan', 'Repeat Scan', '3 Month Follow-up', '12 Month Follow-up'] + [ 'Clinical Follow-up ' + str(n) for n in range(1,5) ]
+        event_name_renames_tsp = ['Screening', '3 Month Follow-up', '12 Month Follow-up'] + [ 'Clinical Follow-up ' + str(n) for n in range(1,5) ]
+        form_df['redcap_event_name'] = form_df['redcap_event_name'].replace(
+            ['screening_visit_arm_1', 'initial_scan_visit_arm_1', 'repeat_scan_visit_arm_1', '3_month_follow_up_arm_1', '12_month_follow_up_arm_1'] + [ 'clinical_follow_up_arm_1' + l for l in ['', 'b', 'c', 'd'] ],
+            event_name_renames
+        )
+        rename = 'visit' # rename "redcap_event_name" depending on form
+        if form not in no_visit_forms:
             form_df = form_df.rename(columns={'redcap_event_name': rename})
+        else:
+            form_df = form_df.drop(columns=['redcap_event_name'])
 
         print(form_df.columns)
         if to_date:
@@ -696,13 +701,14 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
             drz_score_cols = ['demo_study_id', 'version_form', 'session', 'condition', 'tic_freq', 'tsp_tfi', 'duration', 'data_file1', 'notes']
             drz_score_df = pd.read_csv(os.path.join(BASE_PATH, 'TSP', 'drz_output.csv'), skiprows=0, names=drz_score_cols)
             print(drz_score_df)
-            drz_score_df['version_form'] = drz_score_df['version_form'].replace(['screen'] + [ str(d) + 'mo' for d in [3,12,24,36,48,60] ], event_name_renames)
+            drz_score_df['version_form'] = drz_score_df['version_form'].replace(['screen'] + [ str(d) + 'mo' for d in [3,12,24,36,48,60] ], event_name_renames_tsp)
+            drz_score_df['visit'] = drz_score_df['version_form']
 
             form_df = form_df.merge(drz_score_df, on=['demo_study_id', 'visit'], how='inner')
             form_df['int_dur'] = 10 # duration of tic-free intervals
             form_df['version_form'] = form_df[['version_form', 'condition', 'session']].apply(lambda x: '; '.join(x.astype(str)), axis=1)
             form_df['data_file1'] = form_df['data_file1'].astype(str).apply(lambda x: os.path.basename(x)) # filename only since on same path as submission forms and path contains userid
-            form_df = form_df.drop(columns=['condition', 'session', 'duration', 'notes'])
+            form_df = form_df.drop(columns=['condition', 'session', 'duration', 'notes', 'visit'])
             form_df = form_df.rename(columns={'drz_tics': 'comments'})
 
             form_df = form_df.dropna(how='all', subset=[col for col in subset + ['tic_freq', 'tsp_tfi', 'data_file1'] if col in form_df])
