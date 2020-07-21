@@ -15,7 +15,7 @@ from getpass import getuser, getpass
 from gooey import Gooey, GooeyParser
 from itertools import chain
 
-BASE_PATH = r'C:\Users\{}\Box\Black_lab\projects\TS\New Tics R01\Data'.format(getuser())
+BASE_PATH = r'C:\Users\{}\Box\Black_Lab\projects\TS\New_Tics_R01\Data'.format(getuser())
 CONVERSION_DIR = os.path.join(BASE_PATH, 'NIH Data Archive', 'conversion')
 DATA_DICT_PATH = os.path.join(BASE_PATH, 'REDCap', 'REDCap_data_dictionaries', 'NewTicsR01_DataDictionary_2019-10-15.csv')
 FORM_MAP_PATH = os.path.join('cfg', '2692.MappingKey.xlsx')

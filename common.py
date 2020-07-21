@@ -4,7 +4,7 @@ import pyodbc
 from getpass import getuser
 from redcap import Project, RedcapError
 
-DB_PATH_TEMPLATE = r'\\neuroimage\nil\blackf\K\Projects\TS\NewTics\api_tokens.accdb'
+DB_PATH_TEMPLATE = r'K:\Projects\TS\NewTics\api_tokens.accdb'
 REDCAP_URL = 'https://redcap.wustl.edu/redcap/srvrs/prod_v3_1_0_001/redcap/api/'
 
 def get_redcap_project(study_name, password):

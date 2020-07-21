@@ -11,7 +11,7 @@ from gooey import Gooey, GooeyParser
 sys.path.append('..')
 from common import get_redcap_project
 
-DB_PATH = r'\\neuroimage\nil\blackf\K\Projects\TS\NewTics\Recruitment\NewTics_recruit_forms.accdb'
+DB_PATH = r'K:\Projects\TS\NewTics\Recruitment\NewTics_recruit_forms.accdb'
 
 """
 Query recruitment database for subject/parent names
