@@ -39,7 +39,8 @@ def merge_image03(r01_file=None, api_db_password=None, to_date=None):
     image_df['interview_age'] = (image_df['interview_date'] - pd.to_datetime(image_df['demo_dob'])).apply(lambda x: round(.0328767*x.days) if pd.notnull(x) else np.nan)
     image_df['interview_date'] = image_df['interview_date'].map(lambda x: x.strftime('%m/%d/%Y') if pd.notnull(x) else x) # convert to NIH date format
     image_df = image_df.drop(columns=['demo_dob', 'redcap_event_name']) # remove columns that aren't part of submission (i.e. for calculation only)
-    image_df['image_file'] = image_df['image_file'].apply(lambda x: os.path.join(study_dir, os.path.basename(x))) # change filepath to match Windows path (since originally created on unix)
+    image_df['image_file'] = image_df['image_file'].apply(lambda x: os.path.basename(x)) # remove path name from image file name
+    # image_df['image_file'] = image_df['image_file'].apply(lambda x: os.path.join(study_dir, os.path.basename(x))) # change filepath to match Windows path (since originally created on unix)
 
     # filter out scans before date 
     #   (we only submit new imaging data each time)
