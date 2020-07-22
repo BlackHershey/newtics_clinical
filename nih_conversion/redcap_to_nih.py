@@ -457,10 +457,6 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
 
         ### handle event name column from REDCap export
 
-        # NOTE: As of 7/15/2020, the "visit" field is not included in the following forms
-        no_visit_forms = ['adhdrs01', 'bsmss01', 'child_sens01', 'cptc01', 'erd_tics01', 
-            'mab01', 'paness01', 'puts01', 'srs02', 'tichist01', 'tic_outcome_data01', 
-            'ts_dci01', 'wpt01', 'ygtss01']
         event_name_renames = ['Screening', 'Initial Scan', 'Repeat Scan', '3 Month Follow-up', '12 Month Follow-up'] + [ 'Clinical Follow-up ' + str(n) for n in range(1,5) ]
         event_name_renames_tsp = ['Screening', '3 Month Follow-up', '12 Month Follow-up'] + [ 'Clinical Follow-up ' + str(n) for n in range(1,5) ]
         form_df['redcap_event_name'] = form_df['redcap_event_name'].replace(
@@ -468,10 +464,7 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
             event_name_renames
         )
         rename = 'visit' # rename "redcap_event_name" depending on form
-        if form not in no_visit_forms:
-            form_df = form_df.rename(columns={'redcap_event_name': rename})
-        else:
-            form_df = form_df.drop(columns=['redcap_event_name'])
+        form_df = form_df.rename(columns={'redcap_event_name': rename})
 
         print(form_df.columns)
         if to_date:
