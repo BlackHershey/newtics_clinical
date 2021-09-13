@@ -40,6 +40,7 @@ def extract_cpt(study_name, use_existing=False):
 	excel_files = [ s.groups() for s in search_res if s ]
 
 	results = [] # array of arrays of CPT omission/commission/hit rt data for each subject
+	ci = []
 	for (filename, subject, cpt_type) in excel_files:
 		print('Extracting', filename)
 		file_contents = pd.read_excel(join(indir, filename)).values.tolist()
@@ -51,9 +52,10 @@ def extract_cpt(study_name, use_existing=False):
 		one_more = False
 		# result_row = [subject, cpt_type]
 		result_row = [subject]
-
 		for row in file_contents:
 			row = [ str(x) for x in row ]
+			if row[0].startswith("No Decision") or row[0].startswith("Non-clinical") or row[0].startswith("Clinical"):
+				ci.append(row[0])
 			if one_more: # then next line should be %
 				one_more = False
 				result_row.append(row[1])
@@ -74,9 +76,9 @@ def extract_cpt(study_name, use_existing=False):
 	df = df.dropna(axis=0, how='all') # drop rows where assessment was not completed # FIXME -- remove cpt_type because breaks na logic + upload
 	df = df.assign(cpt_scored_data_complete=2)
 	df['redcap_event_name'] = utils.get_screen_event_col(study_vars)
-
+	df['cpt_confidence_index'] = ci
 	df.to_csv(outfile)
-
+	print(outfile)
 	return df[summary_columns]
 
 

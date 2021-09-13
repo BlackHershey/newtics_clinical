@@ -32,7 +32,7 @@ def score_drz_trainer(directory):
                             for line in lines:
                                 if line.startswith("number of tics"):
                                     tics = line.rstrip().split("|")[1]
-                                if line.startswith("number of rewards"):
+                                if line.startswith("number of 10s"):
                                     rewards = line.rstrip().split("|")[1]
                                 if line.startswith("session length"):
                                     duration = float(line.rstrip().split("|")[1])/60
