@@ -10,7 +10,7 @@ from gooey import Gooey, GooeyParser
 
 def score_drz_trainer(directory):
     os.chdir(directory)
-    df = pd.read_csv(directory+"\\drz_output_copy.csv")
+    df = pd.read_csv(directory+"\\drz_output.csv")
     for item in os.listdir(directory):
         if item.endswith(".zip"):
             with zipfile.ZipFile(item, 'r') as f:
@@ -41,7 +41,7 @@ def score_drz_trainer(directory):
                             session_count += 1
                             df = df.append(entry, ignore_index=True)
     df.sort_values(by=['demo_study_id', 'event_name', 'session']).reset_index(drop=True)
-    df.to_csv('drz_output_trainer.csv')
+    df.to_csv('drz_output_with_trainer.csv')
 
 
 

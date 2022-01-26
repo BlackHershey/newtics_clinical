@@ -700,7 +700,7 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
         #   comment field anyways), drop completely empty rows after merge
         if form == 'tsp01':
             drz_score_cols = ['demo_study_id', 'version_form', 'session', 'condition', 'tic_freq', 'tsp_tfi', 'duration', 'data_file1', 'notes']
-            drz_score_df = pd.read_csv(os.path.join(BASE_PATH, 'TSP', 'drz_output.csv'), skiprows=0, names=drz_score_cols)
+            drz_score_df = pd.read_csv(os.path.join(BASE_PATH, 'TSP', 'drz_output_with_trainer.csv'), skiprows=0, names=drz_score_cols)
             print(drz_score_df)
             drz_score_df['version_form'] = drz_score_df['version_form'].replace(['screen'] + [ str(d) + 'mo' for d in [3,12,24,36,48,60] ], event_name_renames_tsp)
             drz_score_df['visit'] = drz_score_df['version_form']
