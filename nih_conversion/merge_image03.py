@@ -1,5 +1,6 @@
 import csv
 import os
+import numpy as np
 import pandas as pd
 
 import sys
@@ -12,6 +13,7 @@ from gooey import Gooey, GooeyParser
 
 study_dir = r'B:\NewTics'
 box_dir = r'C:\Users\{}\Box\Black_Lab\projects\TS\New_Tics_R01\Data\NIH Data Archive\conversion\import_forms'.format(getuser())
+first_R01_scan_date = datetime(2017,8,10)
 
 """
 Create final image03 submission file
@@ -46,6 +48,9 @@ def merge_image03(r01_file=None, api_db_password=None, to_date=None):
     #   (we only submit new imaging data each time)
     if to_date:
         image_df = image_df[pd.to_datetime(image_df['interview_date']) < to_date]
+
+    # Keep just R01 scans after and including 8/10/2017
+    image_df = image_df[pd.to_datetime(image_df['interview_date']) >= first_R01_scan_date]
 
     # extract GUID (aka subjectkey) and sex from one of the other submission forms and merge into final df
     socdemo_df = pd.read_csv(os.path.join(box_dir, 'socdem01.csv'), skiprows=1) # skiprows to skip first line (NIH header)
