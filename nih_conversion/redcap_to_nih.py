@@ -510,6 +510,8 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
         #   remove 'unknown' code for apgar responses, convert the task ages to months, make gest_wks is an integer
         if form == 'mab01':
             form_df['matern_no_preg'] = form_df['matern_no_preg'].replace('unknown', np.nan).astype(float) # 'unknown' strings break output type -- convert to float after correction
+            form_df['matern_no_preg'] = form_df['matern_no_preg'].astype('int', errors='ignore')
+            form_df['matern_no_births'] = form_df['matern_no_births'].astype('int', errors='ignore')
             form_df[['matern_gest_wks']] = form_df[['matern_gest_wks']].apply(age_to_units, args=(AgeUnits.WEEKS,), axis=1)
             form_df[['matern_nicu_days']] = form_df[['matern_nicu_days']].apply(age_to_units, args=(AgeUnits.DAYS,), axis=1)
             apgar_cols = [ col for col in form_df.columns if col.startswith('matern_apgar') ]
