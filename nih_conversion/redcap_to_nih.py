@@ -184,19 +184,19 @@ def separate_multi_response(row, response_col, other_col=None, sep=';'):
 Split up the raw and Tscores by sex
     NIH has separate columns for male/female norms
 """
-def gender_norm_srs(df, cols, type):
+def sex_norm_srs(df, cols, type):
     rename_dict = { col: type + str(i+1) for i, col in enumerate(cols[:5]) }
     total_col = 'srs_total{}'.format('_t' if type == 'tscore' else '')
     rename_dict[total_col] = '{}{}all'.format(type, 'score' if type == 'raw' else '')
     df = df.rename(columns=rename_dict)
 
     renamed_cols = list(rename_dict.values())
-    for gender in [('M', 'male'), ('F', 'female')]:
-        new_cols = [ '_'.join([gender[1], col]) for col in renamed_cols ]
+    for sex in [('M', 'male'), ('F', 'female')]:
+        new_cols = [ '_'.join([sex[1], col]) for col in renamed_cols ]
         for i, col in enumerate(new_cols):
-            df[col] = np.where(df['gender'] == gender[0], df[renamed_cols[i]], np.nan)
+            df[col] = np.where(df['sex'] == sex[0], df[renamed_cols[i]], np.nan)
         score_all_col = [ col for col in new_cols if col.endswith('scoreall') ][0]
-        df.loc[df['gender'] == gender[0], score_all_col] = df.loc[df['gender'] == gender[0], score_all_col].fillna(999)
+        df.loc[df['sex'] == sex[0], score_all_col] = df.loc[df['sex'] == sex[0], score_all_col].fillna(999)
     return df.drop(columns=renamed_cols)
 
 
@@ -339,7 +339,7 @@ def format_date_str(date_series):
 def get_redcap_df(guid_df, nt_file=None, r01_file=None, api_db_password=None):
     # these are the fields from the "old" database that we need to merge with the new R01 database
     nt_fields = ['visit_date', 'demo_sex', 'demo_dob']
-    demo_fields = ['demo_childs_edu','demo_completed_by','demo_ethnicity','demo_mat_edu','demo_maternal_mari','demo_pat_edu','demo_patern_mari','demo_prim_lang','demo_race', 'demo_secondary_language', 'gender','handedness']
+    demo_fields = ['demo_childs_edu','demo_completed_by','demo_ethnicity','demo_mat_edu','demo_maternal_mari','demo_pat_edu','demo_patern_mari','demo_prim_lang','demo_race', 'demo_secondary_language', 'sex','handedness']
     nt_fields = nt_fields.append(demo_fields)
     nt_df = common.get_project_df('nt', nt_file, api_db_password, nt_fields)
     r01_df = common.get_project_df('r01', r01_file, api_db_password)
@@ -372,7 +372,7 @@ def get_redcap_df(guid_df, nt_file=None, r01_file=None, api_db_password=None):
     nt9_11_ids = [ x[0] for x in all_data_df[all_data_df['incl_excl_new_tics_grp'] == 2].index.tolist() ]
     all_data_df = all_data_df.drop(nt9_11_ids, level='demo_study_id')
 
-    # convert gender codes & calculate interview age
+    # convert sex codes & calculate interview age
     all_data_df[['demo_sex', 'demo_dob', 'incl_excl_grp']] = all_data_df.groupby('demo_study_id')[['demo_sex', 'demo_dob', 'incl_excl_grp']].apply(lambda x: x.ffill().bfill())
     all_data_df['demo_sex'] = all_data_df['demo_sex'].replace([0, 1], ['F', 'M'])
     all_data_df['visit_date'] = all_data_df['visit_date'].fillna(all_data_df['mo3fupc_date']) # 3 month visit doesn't have the usual visit_date col
@@ -448,7 +448,7 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
         if form != 'tsp01': # since we're joining to a different csv for tsp + most subjects do not have new form data, we cannot drop here
             form_df = form_df.dropna(how='all', subset=subset)
 
-        form_df = form_df.rename(columns={'demo_sex': 'gender'})
+        form_df = form_df.rename(columns={'demo_sex': 'sex'})
 
         # convert numbers to label where needed
         convert_cols = [ col for pattern in OTHER_LABELS_NEEDED for col in form_df.columns if re.match(pattern, col) ]
@@ -526,15 +526,15 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
             form_df =  form_df.rename(relative_renames, axis=1)
 
         # srs02
-        #   map question responses to actual values (not scores), create separate gender norm columns for scores and rename, add columns
+        #   map question responses to actual values (not scores), create separate sex norm columns for scores and rename, add columns
         #   for who completed form (taken from demo_completed_by field)
         if form == 'srs02':
             srsq_cols = get_matching_cols(form_df, r'srs_800_q\d+')
             form_df[srsq_cols] = form_df[srsq_cols].apply(lambda x: x.str[0], axis=1)
             raw_score_cols = [ 'srs_awareness', 'srs_cognition', 'srs_communication', 'srs_motivation', 'srs_mannerisms', 'srs_total' ]
             tscore_cols = [ col + '_t' for col in raw_score_cols ]
-            form_df =  gender_norm_srs(form_df, raw_score_cols, 'raw')
-            form_df =  gender_norm_srs(form_df, tscore_cols, 'tscore')
+            form_df =  sex_norm_srs(form_df, raw_score_cols, 'raw')
+            form_df =  sex_norm_srs(form_df, tscore_cols, 'tscore')
             form_df['srs_score'] = np.nan
             form_df['respond_detail'] = form_df['demo_completed_by'].apply(mom_or_dad)
             form_df['respond'] = np.where(form_df['respond_detail'].isin([1,2]), 1, np.nan)
@@ -654,7 +654,7 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
             for col in missing_cols:
                 form_df[col] = 999
 
-            drop_cols += [ 'cbcl_' + col for col in ['age', 'date', 'gender', 'race', 'ethnicity', 'grade_in_school', 'attending_school',
+            drop_cols += [ 'cbcl_' + col for col in ['age', 'date', 'sex', 'race', 'ethnicity', 'grade_in_school', 'attending_school',
                 'informant_gender', 'informant_relation', 'notes']] # dropping notes as cbcl_comments maps to same field and cbcl_notes is unused
 
             # drop rows where the ASEBA scoring was not done
