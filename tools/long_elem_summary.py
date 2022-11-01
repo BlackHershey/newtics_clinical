@@ -56,7 +56,7 @@ def get_tic_characteristics(df):
 				persistent_n = data.groupby('student')[type].apply(is_persistent).sum()
 				# no_tics_n = data.groupby('student').apply(lambda g: pd.notnull(g['present']).any() and g[type].sum() == 0).sum()
 				# That row counted a kid with 3 n/a equivalents for 3 visits, and no "location" or "simple_or_complex" entries.
-				no_tics_n = data.groupby('student').apply(lambda g: (g['present'].any() and g[type].sum() == 0).sum()
+				no_tics_n = data.groupby('student').apply(lambda g: (g['present'].any() and g[type].sum() == 0)).sum()
 				isolated_n = grp_n - no_tics_n - persistent_n
 				tic_char.append([type, grp, grp_n, no_tics_n, isolated_n, persistent_n])
 
