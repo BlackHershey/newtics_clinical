@@ -5,6 +5,7 @@ datefinder
 gooey
 lxml
 matplotlib
+nda-tools
 numpy
 openpyxl
 pandas
