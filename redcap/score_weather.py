@@ -32,7 +32,7 @@ def score_weather(study_name, use_existing=False):
 	if use_existing:
 		return pd.read_csv(outfile).set_index(INDEX_COLS)[summary_cols]
 
-	filename_format = r'weather-\d{2,3}-1.txt'
+	filename_format = r'weather-\d{2,3}-\d{1}.txt'
 	files = [ f for f in listdir(indir) if re.match(filename_format, f, flags=re.IGNORECASE) ]
 	results = [] # array of arrays of block percentages for each subject
 	detector = UniversalDetector() # files are a mix of utf-8 and utf-16-le
