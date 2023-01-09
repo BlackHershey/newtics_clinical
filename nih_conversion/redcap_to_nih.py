@@ -766,6 +766,11 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
             for col in int_cols:
                 form_df[col] = form_df[col].astype('float64', errors='ignore')
             form_df.to_csv(upload_file, mode='a', index=False, float_format='%d')
+        elif form == 'mab01':
+            int_cols = ['matern_no_preg', 'matern_no_births']
+            for col in int_cols:
+                form_df[col] = form_df[col].astype('float64', errors='ignore')
+            form_df.to_csv(upload_file, mode='a', index=False, float_format='%d')
         else:
             form_df.to_csv(upload_file, mode='a', index=False, float_format='%g')
 
