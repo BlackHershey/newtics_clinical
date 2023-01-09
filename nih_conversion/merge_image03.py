@@ -54,7 +54,7 @@ def merge_image03(r01_file=None, api_db_password=None, to_date=None):
 
     # extract GUID (aka subjectkey) and sex from one of the other submission forms and merge into final df
     socdemo_df = pd.read_csv(os.path.join(box_dir, 'socdem01.csv'), skiprows=1) # skiprows to skip first line (NIH header)
-    socdemo_df = socdemo_df[['demo_study_id', 'gender', 'subjectkey']] 
+    socdemo_df = socdemo_df[['demo_study_id', 'sex', 'subjectkey']] 
     image_df = image_df.merge(socdemo_df, on='demo_study_id')
 
     # write NIH header into file
