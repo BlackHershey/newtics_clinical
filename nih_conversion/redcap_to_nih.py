@@ -643,7 +643,7 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
             form_df.loc[:, 'cbcl_hobbies1_a':'cbcl_hobbies3_b'] = form_df.loc[:, 'cbcl_hobbies1_a':'cbcl_hobbies3_b'].replace(999, 9) # hobbies/activities has different NA code
             form_df.loc[:, 'cbcl_close_friends':'cbcl_disability'] =  form_df.loc[:, 'cbcl_close_friends':'cbcl_disability'].replace([1,2,3,4,5], [0,1,2,3,9])
             form_df['cbcl_times_a_week_friends'] = form_df['cbcl_times_a_week_friends'].replace([1,2,3], [0,1,2]) # after decrementing range, go back and adjust this specific col
-            fill_cols = ['cbcl_9', 'cbcl_56d', 'cbcl_56h', 'cbcl_76', 'cbcl_84', 'cbcl_85', 'cbcl_98', 'cbcl_106', 'cbcl_110', 'cbcl_112' ] + [ col for col in form_df.columns if re.match('cbcl_(raw|t|per)_(activities|social|school|totalcomp)', col) ]
+            fill_cols = ['cbcl_9', 'cbcl_28', 'cbcl_33', 'cbcl_41', 'cbcl_49', 'cbcl_56d', 'cbcl_56h', 'cbcl_59', 'cbcl_76', 'cbcl_82', 'cbcl_84', 'cbcl_85', 'cbcl_98', 'cbcl_106', 'cbcl_110', 'cbcl_112' ] + [ col for col in form_df.columns if re.match('cbcl_(raw|t|per)_(activities|social|school|totalcomp)', col) ]
             form_df[fill_cols] = form_df[fill_cols].fillna(999)
             for col in fill_cols:
                 form_df[col] = form_df[col].astype('int')
@@ -654,7 +654,7 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
             for col in missing_cols:
                 form_df[col] = 999
 
-            drop_cols += [ 'cbcl_' + col for col in ['age', 'date', 'sex', 'race', 'ethnicity', 'grade_in_school', 'attending_school',
+            drop_cols += [ 'cbcl_' + col for col in ['age', 'date', 'sex', 'gender', 'race', 'ethnicity', 'grade_in_school', 'attending_school',
                 'informant_gender', 'informant_relation', 'notes']] # dropping notes as cbcl_comments maps to same field and cbcl_notes is unused
 
             # drop rows where the ASEBA scoring was not done
@@ -673,6 +673,7 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
                 form_df[col] = form_df[col].replace(0.0,'0')
                 form_df[col] = form_df[col].replace(1.0,'1')
                 form_df[col] = form_df[col].replace(2.0,'2')
+            drop_cols += [ 'cbcl_gender' ]
 
         # cptc01
         #   Rename cols to fit within col name limits
