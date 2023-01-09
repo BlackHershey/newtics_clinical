@@ -755,11 +755,20 @@ def convert_redcap_to_nih(guid_pw, nt_file, r01_file, api_db_password, convert_f
         # write out data to separate NIH form files
         form_df = form_df.drop(columns=drop_cols + [col for col in form_df.columns if col.endswith('_complete')], errors='ignore')
         if form == 'kbit_ii01':
-            int_cols = ['kbit_iq','kbit_matrices_raw','kbit_nonverbal_standard','kbit_riddles_raw','kbit_verbal_knowledge_raw', 
-                'kbit_verbal_plus_nonverbal','kbit_verbal_raw','kbit_verbal_standard']
+            kbit_field_renames = {
+                'kbit_matrices_raw': 'kbit_nonverbal_score', 
+                'kbit_nonverbal_standard': 'kbit_nonverbalstand_score', 
+                'kbit_riddles_raw': 'kbit_riddle_score', 
+                'kbit_verbal_knowledge_raw': 'kbit_verb_score', 
+                'kbit_verbal_plus_nonverbal': 'kbit_iqsum_score', 
+                'kbit_verbal_raw': 'kbit_verbalsum_score', 
+                'kbit_verbal_standard': 'kbit_verbalstand_score', 
+                'kbit_iq': 'kbit_iqstand_score'}
+            form_df = form_df.rename(columns=kbit_field_renames)
+            int_cols = ['kbit_iqstand_score','kbit_nonverbal_score','kbit_nonverbalstand_score','kbit_riddle_score','kbit_verb_score', 
+                'kbit_iqsum_score','kbit_verbalsum_score','kbit_verbalstand_score']
             for col in int_cols:
                 form_df[col] = form_df[col].astype('float64', errors='ignore')
-            print(form_df.dtypes)
             form_df.to_csv(upload_file, mode='a', index=False, float_format='%d')
         elif form == 'cbcl01':
             int_cols = ['cbcl_25', 'cbcl_72', 'cbcl_83', 'cbcl_84', 'cbcl_85', 'cbcl_90', 'cbcl_105']
