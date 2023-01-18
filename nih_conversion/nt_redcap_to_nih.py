@@ -44,7 +44,7 @@ def merge_nt_redcap_dfs(nt_file, r01_file):
         ]
     nt_fields.extend(demo_fields)
     nt_df = pd.read_csv(nt_file, index_col=[0,1])
-    nt_df = nt_df[nt_fields]
+    # nt_df = nt_df[nt_fields]
     r01_df = pd.read_csv(r01_file, index_col=[0,1])
 
     # drop screen visit arm for pre-R01 subjects from R01 df (since we're getting that from the pre-R01 df)
