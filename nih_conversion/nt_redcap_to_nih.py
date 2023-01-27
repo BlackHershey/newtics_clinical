@@ -7,6 +7,10 @@ from datetime import datetime
 # We use their data from the "old" database for the demographics form.
 PRE_R01_SUBJECTS = ['NT736', 'NT738', 'NT805', 'NT806', 'NT807', 'NT808', 'NT809', 'NT810', 'NT812', 'NT814', 'NT816', 'NT817']
 
+fields_to_withhold = [ 'incl_excl_ic', 'incl_excl_who', 'incl_excl_new_tics_grp', 'share_data_permission', 'share_data_comments',
+    'r01_survey_consent', 'demo_dob', 'childs_age', 'incl_excl_fon_scrn', 'dna_sample_lab_id', 'cbcl_birthdate', 'mo3fupc_who',
+    r'\w*_data_files*$', 'age_at_visit', 'visit_referral_source' ]
+
 def merge_projects(df1, df2):
 	right_suffix = '_temp'
 	merged_df = df1.merge(df2, how='outer', left_index=True, right_index=True, suffixes=('', right_suffix))

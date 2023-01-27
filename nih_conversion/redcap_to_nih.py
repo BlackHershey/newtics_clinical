@@ -21,10 +21,6 @@ CONVERSION_DIR = os.path.join(BASE_PATH, 'NDA', 'conversion')
 # GUID_PATH = os.path.join(BASE_PATH, r'NIMH GUID\GUIDs.xlsx')
 # OUTDIR = os.path.join(CONVERSION_DIR, 'import_forms')
 
-# fields_to_withhold = [ 'incl_excl_ic', 'incl_excl_who', 'incl_excl_new_tics_grp', 'share_data_permission', 'share_data_comments',
-#    'r01_survey_consent', 'demo_dob', 'childs_age', 'incl_excl_fon_scrn', 'dna_sample_lab_id', 'cbcl_birthdate', 'mo3fupc_who',
-#    r'\w*_data_files*$', 'age_at_visit', 'visit_referral_source' ]
-
 CHECKBOX_TO_LABEL = [ 'incl_excl_concom_meds', 'demo_race'] # checkbox fields that will need to expanded into concatenated label string
 OTHER_LABELS_NEEDED = [ r'demo_\w*_mari', r'srs_800_q\d+', 'pedsql_version', 'ksads5_asd_specify' ] # other fields to concatenate label strings
 
