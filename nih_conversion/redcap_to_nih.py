@@ -273,8 +273,8 @@ Input params:
     form_df - dataframe with responses for particular form
     update_func - form-specific function to call after splitting (i.e. update_ygtss, update_adhdrs, etc.)
 """
-def split_multiform_row(form_dd_df, nih_form, form_df, update_func):
-    nih_dd_df = pd.read_csv(os.path.join(CONVERSION_DIR, 'nih_dd', nih_form + '_definitions.csv'), usecols=['ElementName', 'Aliases'])     # read in NIH data dictionary
+def split_multiform_row(form_dd_df, nih_dd_directory, nih_form, form_df, update_func):
+    nih_dd_df = pd.read_csv(os.path.join(nih_dd_directory, nih_form + '_definitions.csv'), usecols=['ElementName', 'Aliases'])     # read in NIH data dictionary
     result = None
     redcap_forms = form_dd_df['form'].unique() # get all REDCap forms that map to NIH form
     for form in redcap_forms:
@@ -508,7 +508,7 @@ def convert_redcap_to_nih(guid_file, guid_pw, data_df, redcap_data_dictionary, f
         #   ensure consistent values between different visit forms (i.e. make 'past week' always be 2, introduce new code for 'since last visit')
         if form == 'ticscreener01':
             form_df = form_df.drop(columns=['exp_specify_tics_2_pw'])
-            form_df = split_multiform_row(form_dd_df, form, form_df, update_ticscreener)
+            form_df = split_multiform_row(form_dd_df, nih_dd_directory, form, form_df, update_ticscreener)
 
         # pedsql01
         #   replace version numeric code with string representing version, decrement question scale to 0-4
@@ -520,7 +520,7 @@ def convert_redcap_to_nih(guid_file, guid_pw, data_df, redcap_data_dictionary, f
         # adhdrs01
         #   combine all ADHD rating scale forms into one and use column version form to differentiate lifetime/expert/parent
         if form == 'adhdrs01':
-            form_df = split_multiform_row(form_dd_df, form, form_df, update_adhdrs)
+            form_df = split_multiform_row(form_dd_df, nih_dd_directory, form, form_df, update_adhdrs)
 
         # mvhsp01
         #   recode completed_by, and record visit type under version form
@@ -528,7 +528,7 @@ def convert_redcap_to_nih(guid_file, guid_pw, data_df, redcap_data_dictionary, f
             replace_cols = ['med_completed_by', 'med_completed_by_12mo']
             form_df[replace_cols] = form_df[replace_cols].replace(range(1,5), 8)
             form_df[replace_cols] = form_df[replace_cols].replace([5, 6], [17, 98])
-            form_df = split_multiform_row(form_dd_df, form, form_df, None)
+            form_df = split_multiform_row(form_dd_df, nih_dd_directory, form, form_df, None)
             print(form_df.columns)
             form_df['chf_05'] = form_df['chf_05'].str.slice(0,250)
 
@@ -542,7 +542,7 @@ def convert_redcap_to_nih(guid_file, guid_pw, data_df, redcap_data_dictionary, f
         if form == 'ygtss01':
             long_cols = ['ygtss_past_week_unavailable_list', 'ygtss_past_week_expert_total_tic_score']
             form_df =  form_df.rename({ col: col.replace('past_week_', '') for col in form_df.columns if col in long_cols }, axis=1)
-            form_df = split_multiform_row(form_dd_df, form, form_df, update_ygtss)
+            form_df = split_multiform_row(form_dd_df, nih_dd_directory, form, form_df, update_ygtss)
 
 
         # erd_tics01
@@ -557,7 +557,7 @@ def convert_redcap_to_nih(guid_file, guid_pw, data_df, redcap_data_dictionary, f
         #   label visit/form type (i.e. worst ever, past week), recode 'past week' to always be 3, add unique code for 'since last visit'
         if form == 'cybocs01':
             form_df = form_df.drop(columns='comp_counting_12mo') # FIXME: column is meant to be descriptive; remove once we have updated data dict
-            form_df = split_multiform_row(form_dd_df, form, form_df, update_cybocs)
+            form_df = split_multiform_row(form_dd_df, nih_dd_directory, form, form_df, update_cybocs)
             for col in [ col for col in form_df if 'spec' in col ]:
                 form_df[col] = form_df[col].apply(lambda x: x[:100] if pd.notnull(x) else x)
             form_df['ocd_aware'] = form_df['ocd_aware'].replace('2;3', '2') # question is when does child *first* become aware; 'at start' (2) comes before 'during' (3)

@@ -89,7 +89,7 @@ def parse_args():
     required.add_argument('--guid_file', widget='FileChooser', required=True, help='GUID spreadsheet (xlsx)')
     required.add_argument('--guid_password', widget='PasswordField', required=True, help='password for GUID spreadsheet')
     required.add_argument('--redcap_data_dictionary', widget='FileChooser', required=True, help='RedCap data dictionary (csv)')
-    required.add_argument('--form_mapping_key', widget='FileChooser', required=True, help='Form mapping key file (TYPE?)')
+    required.add_argument('--nih_dd_directory', widget='DirChooser', required=True, help='NIH data dictionary directory')
     required.add_argument('--output_directory', widget='DirChooser', required=True, help='Output directory')
 
     input = parser.add_argument_group('Data Input')
@@ -118,6 +118,7 @@ if __name__ == '__main__':
         args.guid_password, 
         data_df, 
         args.redcap_data_dictionary, 
+        args.nih_dd_directory, 
         args.form_mapping_key, 
         args.output_directory, 
         args.form, 
