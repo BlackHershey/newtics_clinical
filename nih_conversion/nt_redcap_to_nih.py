@@ -111,6 +111,7 @@ if __name__ == '__main__':
 
     # combine pre-R01 and R01 RedCap data
     data_df = merge_nt_redcap_dfs(args.nt_data_file, args.r01_data_file)
+    # data_df.to_csv(os.path.join(args.output_directory, 'nt_merged_df.csv'))
 
     # call convert_redcap_to_nih
     convert_redcap_to_nih( 

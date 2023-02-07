@@ -384,6 +384,8 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
         'socdemo01': ['cbcl_grade_in_school']
     }
 
+    # data_df.to_csv(os.path.join(output_directory, 'data_df_before_form_loop.csv'))
+
     for form in nih_forms:
         required_fields = [ 'subjectkey', 'visit_date', 'interview_age', 'demo_sex'] # fields shared by every NIH form
 
@@ -408,7 +410,7 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
         if form in form_field_map:
             keep_cols += form_field_map[form]
         form_df = data_df[np.unique(keep_cols)].reset_index()
-
+        # form_df.to_csv(os.path.join(output_directory,'form_df_after_keep_cols.csv'))
 
         # remove empty rows
         subset = [ col for col in form_cols if col not in fields_to_withhold + required_fields ]
@@ -426,6 +428,7 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
 
         event_name_renames = ['Screening', 'Initial Scan', 'Repeat Scan', '3 Month Follow-up', '12 Month Follow-up'] + [ 'Clinical Follow-up ' + str(n) for n in range(1,5) ]
         event_name_renames_tsp = ['Screening', '3 Month Follow-up', '12 Month Follow-up'] + [ 'Clinical Follow-up ' + str(n) for n in range(1,5) ]
+        # form_df.to_csv(os.path.join(output_directory,'form_df_before_event_rename.csv'))
         form_df['redcap_event_name'] = form_df['redcap_event_name'].replace(
             ['screening_visit_arm_1', 'initial_scan_visit_arm_1', 'repeat_scan_visit_arm_1', '3_month_follow_up_arm_1', '12_month_follow_up_arm_1'] + [ 'clinical_follow_up_arm_1' + l for l in ['', 'b', 'c', 'd'] ],
             event_name_renames
@@ -433,7 +436,7 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
         rename = 'visit' # rename "redcap_event_name" depending on form
         form_df = form_df.rename(columns={'redcap_event_name': rename})
 
-        print(form_df.columns)
+        # print(form_df.columns)
         if to_date:
             form_df = form_df[form_df['visit_date'] < to_date] # remove rows newer than date
 
