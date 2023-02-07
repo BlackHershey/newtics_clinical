@@ -358,7 +358,8 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
     data_df['visit_date'] = pd.to_datetime(data_df['visit_date'])
     data_df['interview_age'] = (data_df['visit_date'] - pd.to_datetime(data_df['demo_dob'])).apply(lambda x: round(.0328767*x.days) if pd.notnull(x) else np.nan)
 
-    drop_cols = [ col for pattern in fields_to_withhold for col in data_df.columns if re.match(pattern, col) ]
+    if fields_to_withhold:
+        drop_cols = [ col for pattern in fields_to_withhold for col in data_df.columns if re.match(pattern, col) ]
 
     if item_level_replacements:
         replace_df = pd.read_csv(item_level_replacements)
@@ -389,7 +390,7 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
     for form in nih_forms:
         required_fields = [ 'subjectkey', 'visit_date', 'interview_age', 'demo_sex'] # fields shared by every NIH form
 
-        upload_file = os.path.join(output_directory, form + '.csv')
+        upload_file = os.path.join(output_directory, '{}.csv'.format(form))
         if not redo and os.path.exists(upload_file):
             continue
 
@@ -406,10 +407,10 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
         form_cols = list(form_dd_df[form_dd_df['type'] != 'descriptive'].index.values)
 
         # keep form-specific cols, shared cols, and form-specific required cols (that exist outside current forms)
-        keep_cols = form_cols + required_fields 
+        keep_cols = form_cols + required_fields + ['demo_study_id', 'redcap_event_name']
         if form in form_field_map:
             keep_cols += form_field_map[form]
-        form_df = data_df[np.unique(keep_cols)].reset_index()
+        form_df = data_df[np.unique(keep_cols)].reset_index().drop(columns='index')
         # form_df.to_csv(os.path.join(output_directory,'form_df_after_keep_cols.csv'))
 
         # remove empty rows
@@ -439,6 +440,9 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
         # print(form_df.columns)
         if to_date:
             form_df = form_df[form_df['visit_date'] < to_date] # remove rows newer than date
+
+        # Re-index by demo_study_id and visit
+        form_df.set_index(['demo_study_id','visit'])
 
         # ndar_subject01
         #   set our dna sample type to saliva, change value of sample usability to string, set required variables about type of study,

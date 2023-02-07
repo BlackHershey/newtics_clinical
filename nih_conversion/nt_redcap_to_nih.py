@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 from redcap_to_nih import convert_redcap_to_nih
 from gooey import Gooey, GooeyParser
@@ -90,6 +91,7 @@ def parse_args():
     # required.add_argument('--guid_password', widget='PasswordField', required=True, help='password for GUID spreadsheet')
     required.add_argument('--redcap_data_dictionary', widget='FileChooser', required=True, help='RedCap data dictionary (csv)')
     required.add_argument('--nih_dd_directory', widget='DirChooser', required=True, help='NIH data dictionary directory')
+    required.add_argument('--form_mapping_key', widget='FileChooser', required=True, help='Form mapping key file (xlsx)')
     required.add_argument('--output_directory', widget='DirChooser', required=True, help='Output directory')
 
     input = parser.add_argument_group('Data Input')
@@ -99,7 +101,7 @@ def parse_args():
     optional = parser.add_argument_group('Optional Arguments')
     optional.add_argument('--item_level_replacements', widget='FileChooser', help='Item-level replacements (csv)')
     optional.add_argument('--to_date', widget='DateChooser', type=lambda d: datetime.strptime(d, '%Y-%m-%d'), help='only process subjects up until date')
-    optional.add_argument('-f', '--form', nargs='+', help='NIH form(s) to convert (default is all)')
+    optional.add_argument('--convert_forms', nargs='+', help='NIH form(s) to convert (default is all)')
     optional.add_argument('--redo', action='store_true', default=True, help='recreate import file even if already exists')
 
     args = parser.parse_args()
@@ -120,7 +122,9 @@ if __name__ == '__main__':
         args.nih_dd_directory, 
         args.form_mapping_key, 
         args.output_directory, 
-        args.form, 
+        args.item_level_replacements, 
+        args.convert_forms, 
+        fields_to_withhold, 
         args.to_date, 
         args.redo 
         )
