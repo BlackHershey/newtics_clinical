@@ -86,8 +86,8 @@ def merge_nt_redcap_dfs(nt_file, r01_file):
 def parse_args():
     parser = GooeyParser()
     required = parser.add_argument_group('Required Arguments')
-    required.add_argument('--guid_file', widget='FileChooser', required=True, help='GUID spreadsheet (xlsx)')
-    required.add_argument('--guid_password', widget='PasswordField', required=True, help='password for GUID spreadsheet')
+    # required.add_argument('--guid_file', widget='FileChooser', required=True, help='GUID spreadsheet (xlsx)')
+    # required.add_argument('--guid_password', widget='PasswordField', required=True, help='password for GUID spreadsheet')
     required.add_argument('--redcap_data_dictionary', widget='FileChooser', required=True, help='RedCap data dictionary (csv)')
     required.add_argument('--nih_dd_directory', widget='DirChooser', required=True, help='NIH data dictionary directory')
     required.add_argument('--output_directory', widget='DirChooser', required=True, help='Output directory')
@@ -114,8 +114,6 @@ if __name__ == '__main__':
 
     # call convert_redcap_to_nih
     convert_redcap_to_nih( 
-        args.guid_file, 
-        args.guid_password, 
         data_df, 
         args.redcap_data_dictionary, 
         args.nih_dd_directory, 

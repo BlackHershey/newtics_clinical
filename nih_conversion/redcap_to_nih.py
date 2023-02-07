@@ -329,8 +329,18 @@ def format_date_str(date_series):
 """
 Convert RedCap data df to NIH csv format
 """
-def convert_redcap_to_nih(guid_file, guid_pw, data_df, redcap_data_dictionary, form_mapping_key, conversion_directory, output_directory, fields_to_withhold=None, item_level_replacements=None, convert_forms=None, to_date=None, redo=False):
-    guid_df = get_guid_df(guid_file, guid_pw)
+def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, form_mapping_key, output_directory, item_level_replacements=None, convert_forms=None, fields_to_withhold=None, to_date=None, redo=False):
+    # guid_df = get_guid_df(guid_file, guid_pw)
+
+    # rename guid field to subjectkey
+    guid_df = data_df[['guid']]
+    guid_df = guid_df.dropna().rename(columns={'guid': 'subjectkey'})
+    guid_df = guid_df.reset_index().set_index('demo_study_id').drop(columns='redcap_event_name')
+    # guid_df.to_csv(os.path.join(output_directory, 'guid_df.csv'))
+
+    # merge in GUID
+    data_df = data_df.reset_index().join(guid_df, on='demo_study_id', how='left')
+    # data_df.to_csv(os.path.join(output_directory, 'data_df_merged_guid.csv'))
 
     data_dict_df = pd.read_csv(redcap_data_dictionary, index_col=0)
     data_dict_df = data_dict_df.rename(columns={'Form Name': 'form', 'Field Type': 'type', 'Choices, Calculations, OR Slider Labels': 'choices'})
@@ -340,9 +350,6 @@ def convert_redcap_to_nih(guid_file, guid_pw, data_df, redcap_data_dictionary, f
     nih_forms = np.unique(form_map_df.index.values)
     if convert_forms:
         nih_forms = [ form for form in convert_forms if form in nih_forms ]
-
-    # merge in GUID
-    data_df = data_df.join(guid_df, how='inner')
 
     # convert sex codes & calculate interview age
     data_df[['demo_sex', 'demo_dob', 'incl_excl_grp']] = data_df.groupby('demo_study_id')[['demo_sex', 'demo_dob', 'incl_excl_grp']].apply(lambda x: x.ffill().bfill())
