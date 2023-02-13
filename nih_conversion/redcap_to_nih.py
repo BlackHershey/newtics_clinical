@@ -444,6 +444,9 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
         # Re-index by demo_study_id and visit
         form_df.set_index(['demo_study_id','visit'])
 
+        # remove test subjects
+        form_df = form_df[~form_df.demo_study_id.str.contains('test')]
+
         # ndar_subject01
         #   set our dna sample type to saliva, change value of sample usability to string, set required variables about type of study,
         #   specify required phenotype description (taken from iec01 group requirement), set race to 'More than one race' if they checked
