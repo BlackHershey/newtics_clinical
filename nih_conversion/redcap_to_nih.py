@@ -570,6 +570,15 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
             form_df.replace(4, np.nan, inplace=True)
             form_df['expert_diagnosis_ocd'].replace([1,2,3], [3,2,1], inplace=True)
             form_df['expert_diagnosis_onset_notes'] = form_df['expert_diagnosis_onset_notes'].str.slice(0,20)
+            # remove columns that are not in the NDAR data dictionary
+            erd_tics01_drop_cols = [
+                'expert_diagnosis_dsto', 
+                'expert_diagnosis_tic_age_2', 
+                'expert_diagnosis_tic_onset', 
+                'expert_ts_dx_dsmiv', 
+                'expert_ts_dx_dsmiv_tr', 
+                'expert_ts_dx_dsmv']
+            form_df = form_df.drop(columns=erd_tics01_drop_cols, errors='ignore')
 
         # cybocs01
         #   label visit/form type (i.e. worst ever, past week), recode 'past week' to always be 3, add unique code for 'since last visit'
@@ -699,6 +708,8 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
             form_df = form_df.rename(columns={'drz_tics': 'comments'})
 
             form_df = form_df.dropna(how='all', subset=[col for col in subset + ['tic_freq', 'tsp_tfi', 'data_file1'] if col in form_df])
+            tsp01_drop_cols = ['drz_tics_knwn_prev']
+            form_df = form_df.drop(columns=tsp01_drop_cols, errors='ignore')
 
         # endvisit01
         #   Remove "3" (legal guardian) until we ask NDAR to add it as an option for visit_parents_present
@@ -707,6 +718,13 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
             form_df['visit_parents_present'] = form_df['visit_parents_present'].replace('3','')
             # replace 1;2 with 1
             form_df['visit_parents_present'] = form_df['visit_parents_present'].replace('1;2','1')
+            # drop some columns not in NDAR data dictionary
+            endvisit01_drop_cols = [
+                'visit_covid19_mod', 
+                'visit_tics_father', 
+                'visit_tics_mother', 
+                'yrs_w_tics_at_visit']
+            form_df = form_df.drop(columns=endvisit01_drop_cols, errors='ignore')
 
 
         # replace specific items that are known to be problematic / missing (documented in cfg/item_level_replacements spreadsheet)
