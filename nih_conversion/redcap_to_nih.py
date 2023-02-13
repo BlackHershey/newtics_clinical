@@ -661,6 +661,7 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
                 form_df[col] = form_df[col].replace(1.0,'1')
                 form_df[col] = form_df[col].replace(2.0,'2')
             drop_cols += [ 'cbcl_gender' ]
+            form_df = form_df[form_df.ycbcl_age_5_yn.notnull()]
 
         # cptc01
         #   Rename cols to fit within col name limits
