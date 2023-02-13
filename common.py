@@ -25,23 +25,6 @@ def get_redcap_project(study_name, password):
 	api_token = cursor.fetchone()[0]
 	return Project(REDCAP_URL, api_token)
 
-
-def merge_projects(df1, df2):
-	right_suffix = '_temp'
-	merged_df = df1.merge(df2, how='outer', left_index=True, right_index=True, suffixes=('', right_suffix))
-
-	# use other study to fill in missing values in current study
-	fill_cols = [ col[:-len(right_suffix)] for col in merged_df.columns if col.endswith(right_suffix) ]
-	for col in fill_cols:
-		merged_df[col] = merged_df[col].fillna(merged_df[col + right_suffix])
-
-	# cleanup merge conflict columns
-	other_cols = [ col for col in merged_df.columns if col.endswith(right_suffix) ]
-	merged_df.drop(other_cols, axis=1, inplace=True)
-
-	return merged_df
-
-
 def get_project_df(project_name, datafile=None, api_db_password=None, fields=None):
 	if datafile:
 		print('GET_PROJECT_DF FOR {} USING CSV {}'.format(project_name,datafile))
