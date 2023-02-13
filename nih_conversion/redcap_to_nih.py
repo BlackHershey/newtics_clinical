@@ -533,6 +533,7 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
             q_cols = get_matching_cols(form_df, r'pedsql_\w*_\d')
             form_df[q_cols] = form_df[q_cols] - 1
             form_df['pedsql_version'] = form_df['pedsql_version'].apply(lambda x: 'Version for Ages ' + x if pd.notnull(x) else np.nan)
+            form_df = form_df.rename(columns={"pedsql_version": "version_form"})
 
         # adhdrs01
         #   combine all ADHD rating scale forms into one and use column version form to differentiate lifetime/expert/parent
