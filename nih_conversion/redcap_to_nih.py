@@ -144,14 +144,20 @@ def ses_primary_partner(row):
 
     if row[mpartner_cols + fpartner_cols].isnull().all():
         return row
-
-    primary_residence = mom_or_dad(row['primary_residence'])
+    print('mom_or_dad input = {}: {}'.format(row['demo_study_id'], row['ses_primary_res']))
+    try:
+        primary_residence = mom_or_dad(row['ses_primary_res'])
+    except:
+        primary_residence = ''
     if primary_residence == 1:
         row['version_form'] = 'Mother\'s partner'
         row[['bsmss03_spouse', 'bsmss07_spouse']] = row[mpartner_cols]
     elif primary_residence == 2:
         row['version_form'] = 'Father\'s partner'
         row[['bsmss03_spouse', 'bsmss07_spouse']] = row[fpartner_cols]
+    else:
+        row['version_form'] = ''
+        row[['bsmss03_spouse', 'bsmss07_spouse']] = ['','']
 
     return row
 
@@ -491,8 +497,10 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
         #   only report partner info for 'primary residence' parent's partner, remove occ details because of PHI issues
         if form == 'bsmss01':
             form_df = form_df.assign(version_form = np.nan, bsmss03_spouse = np.nan, bsmss07_spouse = np.nan)
+            if 'primary_residence' in form_df.columns:
+                form_df.rename(columns={'primary_residence': 'ses_primary_res'})
             form_df = form_df.apply(ses_primary_partner, axis=1)
-            drop_cols += ['primary_residence', 'ses_detail_occ_mother', 'ses_detail_occ_father'] + [ col for col in form_df.columns if col.endswith('partner') ]
+            drop_cols += ['ses_primary_res', 'ses_detail_occ_mother', 'ses_detail_occ_father'] + [ col for col in form_df.columns if col.endswith('partner') ]
 
         # mab01 (maternal/birth history)
         #   remove 'unknown' code for apgar responses, convert the task ages to months, make gest_wks is an integer
