@@ -829,14 +829,15 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
             form_df = form_df.drop(columns=endvisit01_drop_cols, errors='ignore')
 
 
-        # replace specific items that are known to be problematic / missing (documented in cfg/item_level_replacements spreadsheet)
-        form_replace_df = replace_df[replace_df['form'] == form]
-        form_replace_df['visit_date'] = pd.to_datetime(form_replace_df['visit_date'])
-        for _, row in form_replace_df.iterrows():
-            form_df.loc[
-                (form_df['demo_study_id'] == row['demo_study_id']) & (form_df['visit_date'] == row['visit_date']),
-                row['variable']
-            ] = row['new_value']
+        if replace_df:
+            # replace specific items that are known to be problematic / missing (documented in cfg/item_level_replacements spreadsheet)
+            form_replace_df = replace_df[replace_df['form'] == form]
+            form_replace_df['visit_date'] = pd.to_datetime(form_replace_df['visit_date'])
+            for _, row in form_replace_df.iterrows():
+                form_df.loc[
+                    (form_df['demo_study_id'] == row['demo_study_id']) & (form_df['visit_date'] == row['visit_date']),
+                    row['variable']
+                ] = row['new_value']
 
         # convert all text-field ages to months
         age_to_months_cols = [ col for col in form_df.columns if re.match(r'(matern|ksads|ksads5|fh)(_\w*)*_age', col) and \
