@@ -621,31 +621,35 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
         #   remove repeated demographic info, decrement certain scales to begin at 0, consolidate 'Never' + 'Less than 1' into same answer,
         #   set required cols from newer CBCL version to unkwown (999)
         if form == 'cbcl01':
-            # get cbcl columns in order they appear in form, so we can use column ranges
-            ordered_cbcl_columns = [ x for x in data_dict_df[data_dict_df['form'] == 'child_behavior_checklist_cbcl_ages_6_18'].index.tolist() if x in form_df.columns ]
-            ordered_cbcl_columns = [ col for col in form_df.columns if col not in ordered_cbcl_columns ] + ordered_cbcl_columns
-            form_df = form_df[ordered_cbcl_columns]
-            form_df.loc[:, 'cbcl_1':'cbcl_113c']= form_df.loc[:, 'cbcl_1':'cbcl_113c'].replace([1,2,3], [0,1,2])
-            form_df.loc[:, 'cbcl_number_of_sports':'cbcl_chores_well3'] = form_df.loc[:, 'cbcl_number_of_sports':'cbcl_chores_well3'].replace([1,2,3,4,5], [0,1,2,3,999])
-            form_df.loc[:, 'cbcl_hobbies1_a':'cbcl_hobbies3_b'] = form_df.loc[:, 'cbcl_hobbies1_a':'cbcl_hobbies3_b'].replace(999, 9) # hobbies/activities has different NA code
-            form_df.loc[:, 'cbcl_close_friends':'cbcl_disability'] =  form_df.loc[:, 'cbcl_close_friends':'cbcl_disability'].replace([1,2,3,4,5], [0,1,2,3,9])
-            form_df['cbcl_times_a_week_friends'] = form_df['cbcl_times_a_week_friends'].replace([1,2,3], [0,1,2]) # after decrementing range, go back and adjust this specific col
-            fill_cols = ['cbcl_9', 'cbcl_28', 'cbcl_33', 'cbcl_41', 'cbcl_49', 'cbcl_56d', 'cbcl_56h', 'cbcl_59', 'cbcl_76', 'cbcl_82', 'cbcl_84', 'cbcl_85', 'cbcl_98', 'cbcl_106', 'cbcl_110', 'cbcl_112' ] + [ col for col in form_df.columns if re.match('cbcl_(raw|t|per)_(activities|social|school|totalcomp)', col) ]
-            form_df[fill_cols] = form_df[fill_cols].fillna(999)
-            for col in fill_cols:
-                form_df[col] = form_df[col].astype('int')
-            form_df.loc[:, 'cbcl_sports1_a':'cbcl_sports3_b'] = form_df.loc[:, 'cbcl_sports1_a':'cbcl_sports3_b'].fillna(999) # sports only is marked as required...
+            # check for NewTics or LoTS
+            if 'cbcl_1' in form_df.columns:
+                # get cbcl columns in order they appear in form, so we can use column ranges
+                ordered_cbcl_columns = [ x for x in data_dict_df[data_dict_df['form'] == 'child_behavior_checklist_cbcl_ages_6_18'].index.tolist() if x in form_df.columns ]
+                ordered_cbcl_columns = [ col for col in form_df.columns if col not in ordered_cbcl_columns ] + ordered_cbcl_columns
+                form_df = form_df[ordered_cbcl_columns]
+                form_df.loc[:, 'cbcl_1':'cbcl_113c']= form_df.loc[:, 'cbcl_1':'cbcl_113c'].replace([1,2,3], [0,1,2])
+                form_df.loc[:, 'cbcl_number_of_sports':'cbcl_chores_well3'] = form_df.loc[:, 'cbcl_number_of_sports':'cbcl_chores_well3'].replace([1,2,3,4,5], [0,1,2,3,999])
+                form_df.loc[:, 'cbcl_hobbies1_a':'cbcl_hobbies3_b'] = form_df.loc[:, 'cbcl_hobbies1_a':'cbcl_hobbies3_b'].replace(999, 9) # hobbies/activities has different NA code
+                form_df.loc[:, 'cbcl_close_friends':'cbcl_disability'] =  form_df.loc[:, 'cbcl_close_friends':'cbcl_disability'].replace([1,2,3,4,5], [0,1,2,3,9])
+                form_df['cbcl_times_a_week_friends'] = form_df['cbcl_times_a_week_friends'].replace([1,2,3], [0,1,2]) # after decrementing range, go back and adjust this specific col
+                fill_cols = ['cbcl_9', 'cbcl_28', 'cbcl_33', 'cbcl_41', 'cbcl_49', 'cbcl_56d', 'cbcl_56h', 'cbcl_59', 'cbcl_76', 'cbcl_82', 'cbcl_84', 'cbcl_85', 'cbcl_98', 'cbcl_106', 'cbcl_110', 'cbcl_112' ] + [ col for col in form_df.columns if re.match('cbcl_(raw|t|per)_(activities|social|school|totalcomp)', col) ]
+                form_df[fill_cols] = form_df[fill_cols].fillna(999)
+                for col in fill_cols:
+                    form_df[col] = form_df[col].astype('int')
+                form_df.loc[:, 'cbcl_sports1_a':'cbcl_sports3_b'] = form_df.loc[:, 'cbcl_sports1_a':'cbcl_sports3_b'].fillna(999) # sports only is marked as required...
 
-            missing_cols = [ 'cbcl_' + col for col in ['emotional', 'sleep', 'pervasive', 'depresspr'] ]
-            missing_cols = list(chain(*[ [col, col + '_raw'] for col in missing_cols ])) # need cols with and without '_raw' suffix
-            for col in missing_cols:
-                form_df[col] = 999
+                missing_cols = [ 'cbcl_' + col for col in ['emotional', 'sleep', 'pervasive', 'depresspr'] ]
+                missing_cols = list(chain(*[ [col, col + '_raw'] for col in missing_cols ])) # need cols with and without '_raw' suffix
+                for col in missing_cols:
+                    form_df[col] = 999
 
-            drop_cols += [ 'cbcl_' + col for col in ['age', 'date', 'sex', 'gender', 'race', 'ethnicity', 'grade_in_school', 'attending_school',
-                'informant_gender', 'informant_relation', 'notes']] # dropping notes as cbcl_comments maps to same field and cbcl_notes is unused
+                drop_cols += [ 'cbcl_' + col for col in ['age', 'date', 'sex', 'gender', 'race', 'ethnicity', 'grade_in_school', 'attending_school',
+                    'informant_gender', 'informant_relation', 'notes']] # dropping notes as cbcl_comments maps to same field and cbcl_notes is unused
 
-            # drop rows where the ASEBA scoring was not done
-            form_df.dropna(subset=['cbcl_age_6_18_yn'], inplace=True)
+                # drop rows where the ASEBA scoring was not done
+                form_df.dropna(subset=['cbcl_age_6_18_yn'], inplace=True)
+            else:
+                pass
 
         # cbcl1_501
         #   Recode 3 as 4 (NA), set unrecorded newer columns to unknown (999), cap concerns response
@@ -768,10 +772,13 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
                 form_df[col] = form_df[col].astype('float64', errors='ignore')
             form_df.to_csv(upload_file, mode='a', index=False, float_format='%d')
         elif form == 'cbcl01':
-            int_cols = ['cbcl_25', 'cbcl_72', 'cbcl_83', 'cbcl_84', 'cbcl_85', 'cbcl_90', 'cbcl_105']
-            for col in int_cols:
-                form_df[col] = form_df[col].astype('float64', errors='ignore')
-            form_df.to_csv(upload_file, mode='a', index=False, float_format='%d')
+            if 'cbcl_1' in form_df.columns:
+                int_cols = ['cbcl_25', 'cbcl_72', 'cbcl_83', 'cbcl_84', 'cbcl_85', 'cbcl_90', 'cbcl_105']
+                for col in int_cols:
+                    form_df[col] = form_df[col].astype('float64', errors='ignore')
+                form_df.to_csv(upload_file, mode='a', index=False, float_format='%d')
+            else:
+                pass
         elif form == 'mab01':
             int_cols = ['matern_no_preg', 'matern_no_births']
             for col in int_cols:
