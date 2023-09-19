@@ -535,13 +535,16 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
         #   specify required phenotype description (taken from iec01 group requirement), set race to 'More than one race' if they checked
         #   multiple
         if form == 'ndar_subject01':
-            form_df['sample_description'] = np.where(form_df['dna_sample_collected'] == 1, 'saliva', np.nan)
-            form_df['dna_sample_usable'] = form_df['dna_sample_usable'].replace([1,2], ['Sample usable', 'Sample not usable'])
-            form_df = form_df.assign(twins_study = 'No', sibling_study = 'No', family_study = 'No')
-            conditions = [(form_df['incl_excl_grp'] == 1), (form_df['incl_excl_grp'] == 2), (form_df['incl_excl_grp'] == 3)]
-            choices = ['Tics now, but developed them only in the past 6 months', 'Meets DSM-5 criteria for Tourettes', 'No history of tics']
-            form_df['phenotype_description'] = np.select(conditions, choices, default='999')
-            form_df['demo_race'] = form_df['demo_race'].where(~form_df['demo_race'].str.contains(';'), 'More than one race')
+            if 'incl_excl_grp' in form_df.columns:
+                form_df['sample_description'] = np.where(form_df['dna_sample_collected'] == 1, 'saliva', np.nan)
+                form_df['dna_sample_usable'] = form_df['dna_sample_usable'].replace([1,2], ['Sample usable', 'Sample not usable'])
+                form_df = form_df.assign(twins_study = 'No', sibling_study = 'No', family_study = 'No')
+                conditions = [(form_df['incl_excl_grp'] == 1), (form_df['incl_excl_grp'] == 2), (form_df['incl_excl_grp'] == 3)]
+                choices = ['Tics now, but developed them only in the past 6 months', 'Meets DSM-5 criteria for Tourettes', 'No history of tics']
+                form_df['phenotype_description'] = np.select(conditions, choices, default='999')
+                form_df['demo_race'] = form_df['demo_race'].where(~form_df['demo_race'].str.contains(';'), 'More than one race')
+            else:
+                pass
 
         # phenotype required
         #   some forms (i.e. srs02, ndar_subject01) require phenotype - for all such forms (except iec01 that's already mapped as numbers)
