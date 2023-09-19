@@ -346,9 +346,16 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
     guid_df = guid_df.reset_index().set_index('demo_study_id').drop(columns='redcap_event_name')
     # guid_df.to_csv(os.path.join(output_directory, 'guid_df.csv'))
 
+    # drop LoTS ineligible
+    if 'incl_excl_eligible' in data_df.columns:
+        data_df = data_df[(data_df['incl_excl_eligible'] == 1)]
+
     # merge in GUID
     data_df = data_df.reset_index().join(guid_df, on='demo_study_id', how='left')
     # data_df.to_csv(os.path.join(output_directory, 'data_df_merged_guid.csv'))
+
+    # drop data from subjects with no GUID
+    data_df = data_df[data_df['subjectkey'].str.contains("NDA", na = False)]
 
     data_dict_df = pd.read_csv(redcap_data_dictionary, index_col=0)
     data_dict_df = data_dict_df.rename(columns={'Form Name': 'form', 'Field Type': 'type', 'Choices, Calculations, OR Slider Labels': 'choices'})
@@ -360,9 +367,17 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
         nih_forms = [ form for form in convert_forms if form in nih_forms ]
 
     # convert sex codes & calculate interview age
-    data_df[['demo_sex', 'demo_dob', 'incl_excl_grp']] = data_df.groupby('demo_study_id')[['demo_sex', 'demo_dob', 'incl_excl_grp']].apply(lambda x: x.ffill().bfill())
-    data_df['demo_sex'] = data_df['demo_sex'].replace([0, 1], ['F', 'M'])
-    data_df['visit_date'] = data_df['visit_date'].fillna(data_df['mo3fupc_date']) # 3 month visit doesn't have the usual visit_date col
+    # LoTS doesn't have groups, change this to check for group variable
+    if 'incl_excl_grp' in data_df.columns:
+        # NewTics
+        data_df[['demo_sex', 'demo_dob', 'incl_excl_grp']] = data_df.groupby('demo_study_id')[['demo_sex', 'demo_dob', 'incl_excl_grp']].apply(lambda x: x.ffill().bfill())
+        data_df['demo_sex'] = data_df['demo_sex'].replace([0, 1], ['F', 'M'])
+        data_df['visit_date'] = data_df['visit_date'].fillna(data_df['mo3fupc_date']) # 3 month visit doesn't have the usual visit_date col
+    else:
+        # LoTS
+        data_df[['demo_sex', 'demo_dob']] = data_df.groupby('demo_study_id')[['demo_sex', 'demo_dob']].apply(lambda x: x.ffill().bfill())
+        data_df['demo_sex'] = data_df['demo_sex'].replace([1, 2], ['F', 'M'])
+
     data_df['visit_date'] = pd.to_datetime(data_df['visit_date'])
     data_df['interview_age'] = (data_df['visit_date'] - pd.to_datetime(data_df['demo_dob'])).apply(lambda x: round(.0328767*x.days) if pd.notnull(x) else np.nan)
 
@@ -392,12 +407,19 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
     data_df = replace_staff_names(data_df)
 
     # fields required by NIH forms that don't appear in matched REDCap form
-    form_field_map = {
-        'ndar_subject01': ['incl_excl_grp', 'demo_race'],
-        'srs02': ['incl_excl_grp', 'demo_completed_by'],
-        'cbcl1_501': ['incl_excl_grp'],
-        'socdemo01': ['cbcl_grade_in_school']
-    }
+    if 'incl_excl_grp' in data_df.columns:
+        form_field_map = {
+            'ndar_subject01': ['incl_excl_grp', 'demo_race'],
+            'srs02': ['incl_excl_grp', 'demo_completed_by'],
+            'cbcl1_501': ['incl_excl_grp'],
+            'socdemo01': ['cbcl_grade_in_school']
+        }
+    else:
+        form_field_map = {
+            'ndar_subject01': ['expert_diagnosis_tourette','expert_diagnosis_chronic_tics','expert_diagnosis_transient','demo_race'],
+            'srs02': ['expert_diagnosis_tourette','expert_diagnosis_chronic_tics','expert_diagnosis_transient','demo_completed_by'],
+            'socdemo01': ['cbcl_grade_in_school']
+        }
 
     # data_df.to_csv(os.path.join(output_directory, 'data_df_before_form_loop.csv'))
 
