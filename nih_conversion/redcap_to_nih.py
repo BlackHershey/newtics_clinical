@@ -42,8 +42,10 @@ def get_matching_cols(df, pattern):
 """
 Get map of options for radio button/checkbox variable (key = value stored in data, value = human-readable label)
 """
-def get_data_dict_options_map(df, data_dict_df, variable):
-    choices_str = data_dict_df.xs(variable)['choices']
+def get_data_dict_options_map(variable, choices_str):
+    # print('CHECKBOX VARIABLE = {}'.format(variable))
+    # print('CHOICES STRING = {}'.format(choices_str))
+    # choices_str = data_dict_df.xs(variable)['choices']
     options = [ choice.split(',', 1) for choice in choices_str.split('|') ]
     options = [ opt for opt in options if opt != ['']] # handle extra '|' at end of choice specification
     return { int(option[0].strip()): option[-1].strip() for option in options }
@@ -59,8 +61,8 @@ def concat_column_values(row, sep=';'):
 Consolidate checkbox responses into one variable
 (Individual checkboxes for a variable are stored in separate columns with ___# suffix)
 """
-def replace_checkbox_with_label(df, data_dict_df, variable, use_label=False):
-    num_to_label_map = get_data_dict_options_map(df, data_dict_df, variable)
+def replace_checkbox_with_label(df, variable, choices_str, use_label=False):
+    num_to_label_map = get_data_dict_options_map(variable, choices_str)
     checkbox_cols = get_matching_cols(df, variable + r'___\d+') # get all columns that correspond to variable
     for col in checkbox_cols:
         checkbox_num = re.search(r'___(\d+)', col).group(1) 
@@ -76,8 +78,8 @@ def replace_checkbox_with_label(df, data_dict_df, variable, use_label=False):
 """
 Get label for radio button selected response
 """
-def replace_num_with_label(df, data_dict_df, variable):
-    num_to_label_map = get_data_dict_options_map(df, data_dict_df, variable)
+def replace_num_with_label(df, variable, choices_str):
+    num_to_label_map = get_data_dict_options_map(variable, choices_str)
     df[variable] = df[variable].replace(num_to_label_map)
     return df
 
@@ -142,14 +144,20 @@ def ses_primary_partner(row):
 
     if row[mpartner_cols + fpartner_cols].isnull().all():
         return row
-
-    primary_residence = mom_or_dad(row['primary_residence'])
+    print('mom_or_dad input = {}: {}'.format(row['demo_study_id'], row['ses_primary_res']))
+    try:
+        primary_residence = mom_or_dad(row['ses_primary_res'])
+    except:
+        primary_residence = ''
     if primary_residence == 1:
         row['version_form'] = 'Mother\'s partner'
         row[['bsmss03_spouse', 'bsmss07_spouse']] = row[mpartner_cols]
     elif primary_residence == 2:
         row['version_form'] = 'Father\'s partner'
         row[['bsmss03_spouse', 'bsmss07_spouse']] = row[fpartner_cols]
+    else:
+        row['version_form'] = ''
+        row[['bsmss03_spouse', 'bsmss07_spouse']] = ['','']
 
     return row
 
@@ -338,9 +346,16 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
     guid_df = guid_df.reset_index().set_index('demo_study_id').drop(columns='redcap_event_name')
     # guid_df.to_csv(os.path.join(output_directory, 'guid_df.csv'))
 
+    # drop LoTS ineligible
+    if 'incl_excl_eligible' in data_df.columns:
+        data_df = data_df[(data_df['incl_excl_eligible'] == 1)]
+
     # merge in GUID
     data_df = data_df.reset_index().join(guid_df, on='demo_study_id', how='left')
     # data_df.to_csv(os.path.join(output_directory, 'data_df_merged_guid.csv'))
+
+    # drop data from subjects with no GUID
+    data_df = data_df[data_df['subjectkey'].str.contains("NDA", na = False)]
 
     data_dict_df = pd.read_csv(redcap_data_dictionary, index_col=0)
     data_dict_df = data_dict_df.rename(columns={'Form Name': 'form', 'Field Type': 'type', 'Choices, Calculations, OR Slider Labels': 'choices'})
@@ -352,9 +367,17 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
         nih_forms = [ form for form in convert_forms if form in nih_forms ]
 
     # convert sex codes & calculate interview age
-    data_df[['demo_sex', 'demo_dob', 'incl_excl_grp']] = data_df.groupby('demo_study_id')[['demo_sex', 'demo_dob', 'incl_excl_grp']].apply(lambda x: x.ffill().bfill())
-    data_df['demo_sex'] = data_df['demo_sex'].replace([0, 1], ['F', 'M'])
-    data_df['visit_date'] = data_df['visit_date'].fillna(data_df['mo3fupc_date']) # 3 month visit doesn't have the usual visit_date col
+    # LoTS doesn't have groups, change this to check for group variable
+    if 'incl_excl_grp' in data_df.columns:
+        # NewTics
+        data_df[['demo_sex', 'demo_dob', 'incl_excl_grp']] = data_df.groupby('demo_study_id')[['demo_sex', 'demo_dob', 'incl_excl_grp']].apply(lambda x: x.ffill().bfill())
+        data_df['demo_sex'] = data_df['demo_sex'].replace([0, 1], ['F', 'M'])
+        data_df['visit_date'] = data_df['visit_date'].fillna(data_df['mo3fupc_date']) # 3 month visit doesn't have the usual visit_date col
+    else:
+        # LoTS
+        data_df[['demo_sex', 'demo_dob']] = data_df.groupby('demo_study_id')[['demo_sex', 'demo_dob']].apply(lambda x: x.ffill().bfill())
+        data_df['demo_sex'] = data_df['demo_sex'].replace([1, 2], ['F', 'M'])
+
     data_df['visit_date'] = pd.to_datetime(data_df['visit_date'])
     data_df['interview_age'] = (data_df['visit_date'] - pd.to_datetime(data_df['demo_dob'])).apply(lambda x: round(.0328767*x.days) if pd.notnull(x) else np.nan)
 
@@ -366,24 +389,37 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
     else:
         replace_df = None
 
+    # drop broken COVID checkbox question
+    data_df = data_df.drop(columns=['cov2y_40___1', 'cov2y_40___2', 'cov2y_40___3', 'cov2y_40___4', 'cov2y_40___5', 'cov2y_40___6', 'cov2y_40___7', 'cov2y_40___8', 'cov2y_40___exercised'], errors='ignore')
+    # print('DATA_DICT_DF COLUMNS = {}'.format(data_dict_df.columns))
+    # data_dict_df = data_dict_df[data_dict_df]='', errors='ignore')
+
     # convert all checkboxes to labels
     checkbox_fields = data_dict_df[data_dict_df['type'] == 'checkbox'].index
     for field in checkbox_fields:
+        choices_str = data_dict_df.xs(field)['choices']
         use_label = (field in CHECKBOX_TO_LABEL) # check if combined response should be values or labels
         if not field + '___1' in data_df.columns:
             continue
-        data_df =  replace_checkbox_with_label(data_df, data_dict_df, field, use_label)
+        data_df =  replace_checkbox_with_label(data_df, field, choices_str, use_label)
 
     # replace study staff/doctor names with generic references
     data_df = replace_staff_names(data_df)
 
     # fields required by NIH forms that don't appear in matched REDCap form
-    form_field_map = {
-        'ndar_subject01': ['incl_excl_grp', 'demo_race'],
-        'srs02': ['incl_excl_grp', 'demo_completed_by'],
-        'cbcl1_501': ['incl_excl_grp'],
-        'socdemo01': ['cbcl_grade_in_school']
-    }
+    if 'incl_excl_grp' in data_df.columns:
+        form_field_map = {
+            'ndar_subject01': ['incl_excl_grp', 'demo_race'],
+            'srs02': ['incl_excl_grp', 'demo_completed_by'],
+            'cbcl1_501': ['incl_excl_grp'],
+            'socdemo01': ['cbcl_grade_in_school']
+        }
+    else:
+        form_field_map = {
+            'ndar_subject01': ['expert_diagnosis_tourette','expert_diagnosis_chronic_tics','expert_diagnosis_transient','demo_race'],
+            'srs02': ['expert_diagnosis_tourette','expert_diagnosis_chronic_tics','expert_diagnosis_transient','demo_completed_by'],
+            'socdemo01': ['cbcl_grade_in_school']
+        }
 
     # data_df.to_csv(os.path.join(output_directory, 'data_df_before_form_loop.csv'))
 
@@ -423,17 +459,64 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
         # convert numbers to label where needed
         convert_cols = [ col for pattern in OTHER_LABELS_NEEDED for col in form_df.columns if re.match(pattern, col) ]
         for col in convert_cols:
-            form_df =  replace_num_with_label(form_df, data_dict_df, col)
+            choices_str = data_dict_df.xs(col)['choices']
+            # print('col = {}, choices_str = {}'.format(col,choices_str))
+            form_df =  replace_num_with_label(form_df, col, choices_str)
 
         ### handle event name column from REDCap export
-
-        event_name_renames = ['Screening', 'Initial Scan', 'Repeat Scan', '3 Month Follow-up', '12 Month Follow-up'] + [ 'Clinical Follow-up ' + str(n) for n in range(1,5) ]
-        event_name_renames_tsp = ['Screening', '3 Month Follow-up', '12 Month Follow-up'] + [ 'Clinical Follow-up ' + str(n) for n in range(1,5) ]
+        # NOTE: This dict contains both NewTics R01 and LoTS 2.0 event names
+        event_name_mapping = \
+            {'screening_visit_arm_1': 'Screening', \
+            'initial_scan_visit_arm_1': 'Initial Scan', \
+            'repeat_scan_visit_arm_1': 'Repeat Scan', \
+            '3_month_follow_up_arm_1': '3 Month Follow-up', \
+            '12_month_follow_up_arm_1': '12 Month Follow-up', \
+            'clinical_follow_up_arm_1': 'Clinical Follow-up 1', \
+            'clinical_follow_up_arm_1b': 'Clinical Follow-up 2', \
+            'clinical_follow_up_arm_1c': 'Clinical Follow-up 3', \
+            'clinical_follow_up_arm_1d': 'Clinical Follow-up 4', \
+            'clinical_visit_1_arm_1': 'Clinical Visit 1', \
+            'scan_visit_1_arm_1': 'Scan Visit 1', \
+            'repeat_scan_visit_arm_1': 'Repeat Scan Visit 1', \
+            '3_month_survey_arm_1': '3 Month Survey', \
+            '6_month_survey_arm_1': '6 Month Survey', \
+            '9_month_survey_arm_1': '9 Month Survey', \
+            '12_month_survey_arm_1': '12 Month Survey', \
+            '15_month_survey_arm_1': '15 Month Survey', \
+            '18_month_survey_arm_1': '18 Month Survey', \
+            '21_month_survey_arm_1': '21 Month Survey', \
+            '24_month_clinical_arm_1': '24 Month Clinical Visit', \
+            '24_month_scan_visi_arm_1': '24 Month Scan Visit', \
+            '24_mo_survey_delay_arm_1': '24 Mo Survey Delayed 24 Mo', \
+            '27_mo_survey_delay_arm_1': '24 Mo Survey Delayed 27 Mo', \
+            '30_mo_survey_delay_arm_1': '24 Mo Survey Delayed 30 Mo', \
+            '33_mo_survey_delay_arm_1': '24 Mo Survey Delayed 33 Mo', \
+            'wk_1_day_1_arm_1': 'Week 1 Day 1', \
+            'wk_1_day_2_arm_1': 'Week 1 Day 2', \
+            'wk_1_day_3_arm_1': 'Week 1 Day 3', \
+            'wk_1_day_4_arm_1': 'Week 1 Day 4', \
+            'wk_1_day_5_arm_1': 'Week 1 Day 5', \
+            'wk_1_day_6_arm_1': 'Week 1 Day 6', \
+            'wk_1_day_7_arm_1': 'Week 1 Day 7', \
+            'wk_2_day_1_arm_1': 'Week 2 Day 1', \
+            'wk_2_day_2_arm_1': 'Week 2 Day 2', \
+            'wk_2_day_3_arm_1': 'Week 2 Day 3', \
+            'wk_2_day_4_arm_1': 'Week 2 Day 4', \
+            'wk_2_day_5_arm_1': 'Week 2 Day 5', \
+            'wk_2_day_6_arm_1': 'Week 2 Day 6', \
+            'wk_2_day_7_arm_1': 'Week 2 Day 7'}
+            
+        event_name_renames_tsp = \
+            ['Screening', \
+            '3 Month Follow-up', \
+            '12 Month Follow-up', \
+            'Clinical Follow-up 1', \
+            'Clinical Follow-up 2', \
+            'Clinical Follow-up 3', \
+            'Clinical Follow-up 4']
+        
         # form_df.to_csv(os.path.join(output_directory,'form_df_before_event_rename.csv'))
-        form_df['redcap_event_name'] = form_df['redcap_event_name'].replace(
-            ['screening_visit_arm_1', 'initial_scan_visit_arm_1', 'repeat_scan_visit_arm_1', '3_month_follow_up_arm_1', '12_month_follow_up_arm_1'] + [ 'clinical_follow_up_arm_1' + l for l in ['', 'b', 'c', 'd'] ],
-            event_name_renames
-        )
+        form_df['redcap_event_name'] = form_df['redcap_event_name'].replace(to_replace=event_name_mapping)
         rename = 'visit' # rename "redcap_event_name" depending on form
         form_df = form_df.rename(columns={'redcap_event_name': rename})
 
@@ -452,19 +535,23 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
         #   specify required phenotype description (taken from iec01 group requirement), set race to 'More than one race' if they checked
         #   multiple
         if form == 'ndar_subject01':
-            form_df['sample_description'] = np.where(form_df['dna_sample_collected'] == 1, 'saliva', np.nan)
-            form_df['dna_sample_usable'] = form_df['dna_sample_usable'].replace([1,2], ['Sample usable', 'Sample not usable'])
-            form_df = form_df.assign(twins_study = 'No', sibling_study = 'No', family_study = 'No')
-            conditions = [(form_df['incl_excl_grp'] == 1), (form_df['incl_excl_grp'] == 2), (form_df['incl_excl_grp'] == 3)]
-            choices = ['Tics now, but developed them only in the past 6 months', 'Meets DSM-5 criteria for Tourettes', 'No history of tics']
-            form_df['phenotype_description'] = np.select(conditions, choices, default='999')
-            form_df['demo_race'] = form_df['demo_race'].where(~form_df['demo_race'].str.contains(';'), 'More than one race')
+            if 'incl_excl_grp' in form_df.columns:
+                form_df['sample_description'] = np.where(form_df['dna_sample_collected'] == 1, 'saliva', np.nan)
+                form_df['dna_sample_usable'] = form_df['dna_sample_usable'].replace([1,2], ['Sample usable', 'Sample not usable'])
+                form_df = form_df.assign(twins_study = 'No', sibling_study = 'No', family_study = 'No')
+                conditions = [(form_df['incl_excl_grp'] == 1), (form_df['incl_excl_grp'] == 2), (form_df['incl_excl_grp'] == 3)]
+                choices = ['Tics now, but developed them only in the past 6 months', 'Meets DSM-5 criteria for Tourettes', 'No history of tics']
+                form_df['phenotype_description'] = np.select(conditions, choices, default='999')
+                form_df['demo_race'] = form_df['demo_race'].where(~form_df['demo_race'].str.contains(';'), 'More than one race')
+            else:
+                pass
 
         # phenotype required
         #   some forms (i.e. srs02, ndar_subject01) require phenotype - for all such forms (except iec01 that's already mapped as numbers)
         #   we want to change the field name and use the concatenated labels
         if form != 'iec01' and 'incl_excl_grp' in keep_cols:
-            form_df =  replace_num_with_label(form_df, data_dict_df, 'incl_excl_grp').rename(columns={'incl_excl_grp': 'phenotype'})
+            choices_str = data_dict_df.xs('incl_excl_grp')['choices']
+            form_df =  replace_num_with_label(form_df, 'incl_excl_grp', choices_str).rename(columns={'incl_excl_grp': 'phenotype'})
 
         # socdemo01
             # only report one race (store others in separate var), add 'years' to education string, swap hispanic codes, make sure education
@@ -480,8 +567,10 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
         #   only report partner info for 'primary residence' parent's partner, remove occ details because of PHI issues
         if form == 'bsmss01':
             form_df = form_df.assign(version_form = np.nan, bsmss03_spouse = np.nan, bsmss07_spouse = np.nan)
+            if 'primary_residence' in form_df.columns:
+                form_df.rename(columns={'primary_residence': 'ses_primary_res'})
             form_df = form_df.apply(ses_primary_partner, axis=1)
-            drop_cols += ['primary_residence', 'ses_detail_occ_mother', 'ses_detail_occ_father'] + [ col for col in form_df.columns if col.endswith('partner') ]
+            drop_cols += ['ses_primary_res', 'ses_detail_occ_mother', 'ses_detail_occ_father'] + [ col for col in form_df.columns if col.endswith('partner') ]
 
         # mab01 (maternal/birth history)
         #   remove 'unknown' code for apgar responses, convert the task ages to months, make gest_wks is an integer
@@ -524,8 +613,11 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
         #   only report most specific value of symptom checklist timeframe (i.e. 'past week' if both 'past week' and 'lifetime' selected),
         #   ensure consistent values between different visit forms (i.e. make 'past week' always be 2, introduce new code for 'since last visit')
         if form == 'ticscreener01':
-            form_df = form_df.drop(columns=['exp_specify_tics_2_pw'])
-            form_df = split_multiform_row(form_dd_df, nih_dd_directory, form, form_df, update_ticscreener)
+            if 'exp_specify_tics_2_pw' in form_df.columns:
+                form_df = form_df.drop(columns=['exp_specify_tics_2_pw'], errors='ignore')
+                form_df = split_multiform_row(form_dd_df, nih_dd_directory, form, form_df, update_ticscreener)
+            else:
+                pass
 
         # pedsql01
         #   replace version numeric code with string representing version, decrement question scale to 0-4
@@ -543,12 +635,15 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
         # mvhsp01
         #   recode completed_by, and record visit type under version form
         if form == 'mvhsp01':
-            replace_cols = ['med_completed_by', 'med_completed_by_12mo']
-            form_df[replace_cols] = form_df[replace_cols].replace(range(1,5), 8)
-            form_df[replace_cols] = form_df[replace_cols].replace([5, 6], [17, 98])
-            form_df = split_multiform_row(form_dd_df, nih_dd_directory, form, form_df, None)
-            print(form_df.columns)
-            form_df['chf_05'] = form_df['chf_05'].str.slice(0,250)
+            if 'med_completed_by_12mo' in form_df.columns:
+                replace_cols = ['med_completed_by', 'med_completed_by_12mo']
+                form_df[replace_cols] = form_df[replace_cols].replace(range(1,5), 8)
+                form_df[replace_cols] = form_df[replace_cols].replace([5, 6], [17, 98])
+                form_df = split_multiform_row(form_dd_df, nih_dd_directory, form, form_df, None)
+                # print(form_df.columns)
+                form_df['chf_05'] = form_df['chf_05'].str.slice(0,250)
+            else:
+                form_df.drop(columns=['med_completed_by'], errors='ignore')
 
         # puts01
         #   specify that we used 9-item PUTS
@@ -558,6 +653,8 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
         # ygtss01
         #   remove '_past_week' to meet column length limits
         if form == 'ygtss01':
+            # rename some columns
+            form_df =  form_df.rename(columns={'ygtss_motor_tic_score':'ygtss_motor_total', 'ygtss_phonic_tic_score': 'ygtss_phonic_total'})
             long_cols = ['ygtss_past_week_unavailable_list', 'ygtss_past_week_expert_total_tic_score']
             form_df =  form_df.rename({ col: col.replace('past_week_', '') for col in form_df.columns if col in long_cols }, axis=1)
             form_df = split_multiform_row(form_dd_df, nih_dd_directory, form, form_df, update_ygtss)
@@ -583,7 +680,7 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
         # cybocs01
         #   label visit/form type (i.e. worst ever, past week), recode 'past week' to always be 3, add unique code for 'since last visit'
         if form == 'cybocs01':
-            form_df = form_df.drop(columns='comp_counting_12mo') # FIXME: column is meant to be descriptive; remove once we have updated data dict
+            form_df = form_df.drop(columns='comp_counting_12mo', errors='ignore') # FIXME: column is meant to be descriptive; remove once we have updated data dict
             form_df = split_multiform_row(form_dd_df, nih_dd_directory, form, form_df, update_cybocs)
             for col in [ col for col in form_df if 'spec' in col ]:
                 form_df[col] = form_df[col].apply(lambda x: x[:100] if pd.notnull(x) else x)
@@ -621,31 +718,35 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
         #   remove repeated demographic info, decrement certain scales to begin at 0, consolidate 'Never' + 'Less than 1' into same answer,
         #   set required cols from newer CBCL version to unkwown (999)
         if form == 'cbcl01':
-            # get cbcl columns in order they appear in form, so we can use column ranges
-            ordered_cbcl_columns = [ x for x in data_dict_df[data_dict_df['form'] == 'child_behavior_checklist_cbcl_ages_6_18'].index.tolist() if x in form_df.columns ]
-            ordered_cbcl_columns = [ col for col in form_df.columns if col not in ordered_cbcl_columns ] + ordered_cbcl_columns
-            form_df = form_df[ordered_cbcl_columns]
-            form_df.loc[:, 'cbcl_1':'cbcl_113c']= form_df.loc[:, 'cbcl_1':'cbcl_113c'].replace([1,2,3], [0,1,2])
-            form_df.loc[:, 'cbcl_number_of_sports':'cbcl_chores_well3'] = form_df.loc[:, 'cbcl_number_of_sports':'cbcl_chores_well3'].replace([1,2,3,4,5], [0,1,2,3,999])
-            form_df.loc[:, 'cbcl_hobbies1_a':'cbcl_hobbies3_b'] = form_df.loc[:, 'cbcl_hobbies1_a':'cbcl_hobbies3_b'].replace(999, 9) # hobbies/activities has different NA code
-            form_df.loc[:, 'cbcl_close_friends':'cbcl_disability'] =  form_df.loc[:, 'cbcl_close_friends':'cbcl_disability'].replace([1,2,3,4,5], [0,1,2,3,9])
-            form_df['cbcl_times_a_week_friends'] = form_df['cbcl_times_a_week_friends'].replace([1,2,3], [0,1,2]) # after decrementing range, go back and adjust this specific col
-            fill_cols = ['cbcl_9', 'cbcl_28', 'cbcl_33', 'cbcl_41', 'cbcl_49', 'cbcl_56d', 'cbcl_56h', 'cbcl_59', 'cbcl_76', 'cbcl_82', 'cbcl_84', 'cbcl_85', 'cbcl_98', 'cbcl_106', 'cbcl_110', 'cbcl_112' ] + [ col for col in form_df.columns if re.match('cbcl_(raw|t|per)_(activities|social|school|totalcomp)', col) ]
-            form_df[fill_cols] = form_df[fill_cols].fillna(999)
-            for col in fill_cols:
-                form_df[col] = form_df[col].astype('int')
-            form_df.loc[:, 'cbcl_sports1_a':'cbcl_sports3_b'] = form_df.loc[:, 'cbcl_sports1_a':'cbcl_sports3_b'].fillna(999) # sports only is marked as required...
+            # check for NewTics or LoTS
+            if 'cbcl_1' in form_df.columns:
+                # get cbcl columns in order they appear in form, so we can use column ranges
+                ordered_cbcl_columns = [ x for x in data_dict_df[data_dict_df['form'] == 'child_behavior_checklist_cbcl_ages_6_18'].index.tolist() if x in form_df.columns ]
+                ordered_cbcl_columns = [ col for col in form_df.columns if col not in ordered_cbcl_columns ] + ordered_cbcl_columns
+                form_df = form_df[ordered_cbcl_columns]
+                form_df.loc[:, 'cbcl_1':'cbcl_113c']= form_df.loc[:, 'cbcl_1':'cbcl_113c'].replace([1,2,3], [0,1,2])
+                form_df.loc[:, 'cbcl_number_of_sports':'cbcl_chores_well3'] = form_df.loc[:, 'cbcl_number_of_sports':'cbcl_chores_well3'].replace([1,2,3,4,5], [0,1,2,3,999])
+                form_df.loc[:, 'cbcl_hobbies1_a':'cbcl_hobbies3_b'] = form_df.loc[:, 'cbcl_hobbies1_a':'cbcl_hobbies3_b'].replace(999, 9) # hobbies/activities has different NA code
+                form_df.loc[:, 'cbcl_close_friends':'cbcl_disability'] =  form_df.loc[:, 'cbcl_close_friends':'cbcl_disability'].replace([1,2,3,4,5], [0,1,2,3,9])
+                form_df['cbcl_times_a_week_friends'] = form_df['cbcl_times_a_week_friends'].replace([1,2,3], [0,1,2]) # after decrementing range, go back and adjust this specific col
+                fill_cols = ['cbcl_9', 'cbcl_28', 'cbcl_33', 'cbcl_41', 'cbcl_49', 'cbcl_56d', 'cbcl_56h', 'cbcl_59', 'cbcl_76', 'cbcl_82', 'cbcl_84', 'cbcl_85', 'cbcl_98', 'cbcl_106', 'cbcl_110', 'cbcl_112' ] + [ col for col in form_df.columns if re.match('cbcl_(raw|t|per)_(activities|social|school|totalcomp)', col) ]
+                form_df[fill_cols] = form_df[fill_cols].fillna(999)
+                for col in fill_cols:
+                    form_df[col] = form_df[col].astype('int')
+                form_df.loc[:, 'cbcl_sports1_a':'cbcl_sports3_b'] = form_df.loc[:, 'cbcl_sports1_a':'cbcl_sports3_b'].fillna(999) # sports only is marked as required...
 
-            missing_cols = [ 'cbcl_' + col for col in ['emotional', 'sleep', 'pervasive', 'depresspr'] ]
-            missing_cols = list(chain(*[ [col, col + '_raw'] for col in missing_cols ])) # need cols with and without '_raw' suffix
-            for col in missing_cols:
-                form_df[col] = 999
+                missing_cols = [ 'cbcl_' + col for col in ['emotional', 'sleep', 'pervasive', 'depresspr'] ]
+                missing_cols = list(chain(*[ [col, col + '_raw'] for col in missing_cols ])) # need cols with and without '_raw' suffix
+                for col in missing_cols:
+                    form_df[col] = 999
 
-            drop_cols += [ 'cbcl_' + col for col in ['age', 'date', 'sex', 'gender', 'race', 'ethnicity', 'grade_in_school', 'attending_school',
-                'informant_gender', 'informant_relation', 'notes']] # dropping notes as cbcl_comments maps to same field and cbcl_notes is unused
+                drop_cols += [ 'cbcl_' + col for col in ['age', 'date', 'sex', 'gender', 'race', 'ethnicity', 'grade_in_school', 'attending_school',
+                    'informant_gender', 'informant_relation', 'notes']] # dropping notes as cbcl_comments maps to same field and cbcl_notes is unused
 
-            # drop rows where the ASEBA scoring was not done
-            form_df.dropna(subset=['cbcl_age_6_18_yn'], inplace=True)
+                # drop rows where the ASEBA scoring was not done
+                form_df.dropna(subset=['cbcl_age_6_18_yn'], inplace=True)
+            else:
+                pass
 
         # cbcl1_501
         #   Recode 3 as 4 (NA), set unrecorded newer columns to unknown (999), cap concerns response
@@ -728,14 +829,15 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
             form_df = form_df.drop(columns=endvisit01_drop_cols, errors='ignore')
 
 
-        # replace specific items that are known to be problematic / missing (documented in cfg/item_level_replacements spreadsheet)
-        form_replace_df = replace_df[replace_df['form'] == form]
-        form_replace_df['visit_date'] = pd.to_datetime(form_replace_df['visit_date'])
-        for _, row in form_replace_df.iterrows():
-            form_df.loc[
-                (form_df['demo_study_id'] == row['demo_study_id']) & (form_df['visit_date'] == row['visit_date']),
-                row['variable']
-            ] = row['new_value']
+        if replace_df:
+            # replace specific items that are known to be problematic / missing (documented in cfg/item_level_replacements spreadsheet)
+            form_replace_df = replace_df[replace_df['form'] == form]
+            form_replace_df['visit_date'] = pd.to_datetime(form_replace_df['visit_date'])
+            for _, row in form_replace_df.iterrows():
+                form_df.loc[
+                    (form_df['demo_study_id'] == row['demo_study_id']) & (form_df['visit_date'] == row['visit_date']),
+                    row['variable']
+                ] = row['new_value']
 
         # convert all text-field ages to months
         age_to_months_cols = [ col for col in form_df.columns if re.match(r'(matern|ksads|ksads5|fh)(_\w*)*_age', col) and \
@@ -768,10 +870,13 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
                 form_df[col] = form_df[col].astype('float64', errors='ignore')
             form_df.to_csv(upload_file, mode='a', index=False, float_format='%d')
         elif form == 'cbcl01':
-            int_cols = ['cbcl_25', 'cbcl_72', 'cbcl_83', 'cbcl_84', 'cbcl_85', 'cbcl_90', 'cbcl_105']
-            for col in int_cols:
-                form_df[col] = form_df[col].astype('float64', errors='ignore')
-            form_df.to_csv(upload_file, mode='a', index=False, float_format='%d')
+            if 'cbcl_1' in form_df.columns:
+                int_cols = ['cbcl_25', 'cbcl_72', 'cbcl_83', 'cbcl_84', 'cbcl_85', 'cbcl_90', 'cbcl_105']
+                for col in int_cols:
+                    form_df[col] = form_df[col].astype('float64', errors='ignore')
+                form_df.to_csv(upload_file, mode='a', index=False, float_format='%d')
+            else:
+                pass
         elif form == 'mab01':
             int_cols = ['matern_no_preg', 'matern_no_births']
             for col in int_cols:
