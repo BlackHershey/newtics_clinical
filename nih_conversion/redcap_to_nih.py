@@ -42,8 +42,10 @@ def get_matching_cols(df, pattern):
 """
 Get map of options for radio button/checkbox variable (key = value stored in data, value = human-readable label)
 """
-def get_data_dict_options_map(df, data_dict_df, variable):
-    choices_str = data_dict_df.xs(variable)['choices']
+def get_data_dict_options_map(variable, choices_str):
+    # print('CHECKBOX VARIABLE = {}'.format(variable))
+    # print('CHOICES STRING = {}'.format(choices_str))
+    # choices_str = data_dict_df.xs(variable)['choices']
     options = [ choice.split(',', 1) for choice in choices_str.split('|') ]
     options = [ opt for opt in options if opt != ['']] # handle extra '|' at end of choice specification
     return { int(option[0].strip()): option[-1].strip() for option in options }
@@ -59,8 +61,8 @@ def concat_column_values(row, sep=';'):
 Consolidate checkbox responses into one variable
 (Individual checkboxes for a variable are stored in separate columns with ___# suffix)
 """
-def replace_checkbox_with_label(df, data_dict_df, variable, use_label=False):
-    num_to_label_map = get_data_dict_options_map(df, data_dict_df, variable)
+def replace_checkbox_with_label(df, variable, choices_str, use_label=False):
+    num_to_label_map = get_data_dict_options_map(variable, choices_str)
     checkbox_cols = get_matching_cols(df, variable + r'___\d+') # get all columns that correspond to variable
     for col in checkbox_cols:
         checkbox_num = re.search(r'___(\d+)', col).group(1) 
@@ -76,8 +78,8 @@ def replace_checkbox_with_label(df, data_dict_df, variable, use_label=False):
 """
 Get label for radio button selected response
 """
-def replace_num_with_label(df, data_dict_df, variable):
-    num_to_label_map = get_data_dict_options_map(df, data_dict_df, variable)
+def replace_num_with_label(df, variable, choices_str):
+    num_to_label_map = get_data_dict_options_map(variable, choices_str)
     df[variable] = df[variable].replace(num_to_label_map)
     return df
 
@@ -366,13 +368,19 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
     else:
         replace_df = None
 
+    # drop broken COVID checkbox question
+    data_df = data_df.drop(columns=['cov2y_40___1', 'cov2y_40___2', 'cov2y_40___3', 'cov2y_40___4', 'cov2y_40___5', 'cov2y_40___6', 'cov2y_40___7', 'cov2y_40___8', 'cov2y_40___exercised'], errors='ignore')
+    # print('DATA_DICT_DF COLUMNS = {}'.format(data_dict_df.columns))
+    # data_dict_df = data_dict_df[data_dict_df]='', errors='ignore')
+
     # convert all checkboxes to labels
     checkbox_fields = data_dict_df[data_dict_df['type'] == 'checkbox'].index
     for field in checkbox_fields:
+        choices_str = data_dict_df.xs(field)['choices']
         use_label = (field in CHECKBOX_TO_LABEL) # check if combined response should be values or labels
         if not field + '___1' in data_df.columns:
             continue
-        data_df =  replace_checkbox_with_label(data_df, data_dict_df, field, use_label)
+        data_df =  replace_checkbox_with_label(data_df, field, choices_str, use_label)
 
     # replace study staff/doctor names with generic references
     data_df = replace_staff_names(data_df)
@@ -423,7 +431,9 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
         # convert numbers to label where needed
         convert_cols = [ col for pattern in OTHER_LABELS_NEEDED for col in form_df.columns if re.match(pattern, col) ]
         for col in convert_cols:
-            form_df =  replace_num_with_label(form_df, data_dict_df, col)
+            choices_str = data_dict_df.xs(col)['choices']
+            # print('col = {}, choices_str = {}'.format(col,choices_str))
+            form_df =  replace_num_with_label(form_df, col, choices_str)
 
         ### handle event name column from REDCap export
 
@@ -464,7 +474,8 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
         #   some forms (i.e. srs02, ndar_subject01) require phenotype - for all such forms (except iec01 that's already mapped as numbers)
         #   we want to change the field name and use the concatenated labels
         if form != 'iec01' and 'incl_excl_grp' in keep_cols:
-            form_df =  replace_num_with_label(form_df, data_dict_df, 'incl_excl_grp').rename(columns={'incl_excl_grp': 'phenotype'})
+            choices_str = data_dict_df.xs('incl_excl_grp')['choices']
+            form_df =  replace_num_with_label(form_df, 'incl_excl_grp', choices_str).rename(columns={'incl_excl_grp': 'phenotype'})
 
         # socdemo01
             # only report one race (store others in separate var), add 'years' to education string, swap hispanic codes, make sure education
