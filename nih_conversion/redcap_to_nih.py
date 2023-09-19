@@ -464,14 +464,59 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
             form_df =  replace_num_with_label(form_df, col, choices_str)
 
         ### handle event name column from REDCap export
-
-        event_name_renames = ['Screening', 'Initial Scan', 'Repeat Scan', '3 Month Follow-up', '12 Month Follow-up'] + [ 'Clinical Follow-up ' + str(n) for n in range(1,5) ]
-        event_name_renames_tsp = ['Screening', '3 Month Follow-up', '12 Month Follow-up'] + [ 'Clinical Follow-up ' + str(n) for n in range(1,5) ]
+        # NOTE: This dict contains both NewTics R01 and LoTS 2.0 event names
+        event_name_mapping = \
+            {'screening_visit_arm_1': 'Screening', \
+            'initial_scan_visit_arm_1': 'Initial Scan', \
+            'repeat_scan_visit_arm_1': 'Repeat Scan', \
+            '3_month_follow_up_arm_1': '3 Month Follow-up', \
+            '12_month_follow_up_arm_1': '12 Month Follow-up', \
+            'clinical_follow_up_arm_1': 'Clinical Follow-up 1', \
+            'clinical_follow_up_arm_1b': 'Clinical Follow-up 2', \
+            'clinical_follow_up_arm_1c': 'Clinical Follow-up 3', \
+            'clinical_follow_up_arm_1d': 'Clinical Follow-up 4', \
+            'clinical_visit_1_arm_1': 'Clinical Visit 1', \
+            'scan_visit_1_arm_1': 'Scan Visit 1', \
+            'repeat_scan_visit_arm_1': 'Repeat Scan Visit 1', \
+            '3_month_survey_arm_1': '3 Month Survey', \
+            '6_month_survey_arm_1': '6 Month Survey', \
+            '9_month_survey_arm_1': '9 Month Survey', \
+            '12_month_survey_arm_1': '12 Month Survey', \
+            '15_month_survey_arm_1': '15 Month Survey', \
+            '18_month_survey_arm_1': '18 Month Survey', \
+            '21_month_survey_arm_1': '21 Month Survey', \
+            '24_month_clinical_arm_1': '24 Month Clinical Visit', \
+            '24_month_scan_visi_arm_1': '24 Month Scan Visit', \
+            '24_mo_survey_delay_arm_1': '24 Mo Survey Delayed 24 Mo', \
+            '27_mo_survey_delay_arm_1': '24 Mo Survey Delayed 27 Mo', \
+            '30_mo_survey_delay_arm_1': '24 Mo Survey Delayed 30 Mo', \
+            '33_mo_survey_delay_arm_1': '24 Mo Survey Delayed 33 Mo', \
+            'wk_1_day_1_arm_1': 'Week 1 Day 1', \
+            'wk_1_day_2_arm_1': 'Week 1 Day 2', \
+            'wk_1_day_3_arm_1': 'Week 1 Day 3', \
+            'wk_1_day_4_arm_1': 'Week 1 Day 4', \
+            'wk_1_day_5_arm_1': 'Week 1 Day 5', \
+            'wk_1_day_6_arm_1': 'Week 1 Day 6', \
+            'wk_1_day_7_arm_1': 'Week 1 Day 7', \
+            'wk_2_day_1_arm_1': 'Week 2 Day 1', \
+            'wk_2_day_2_arm_1': 'Week 2 Day 2', \
+            'wk_2_day_3_arm_1': 'Week 2 Day 3', \
+            'wk_2_day_4_arm_1': 'Week 2 Day 4', \
+            'wk_2_day_5_arm_1': 'Week 2 Day 5', \
+            'wk_2_day_6_arm_1': 'Week 2 Day 6', \
+            'wk_2_day_7_arm_1': 'Week 2 Day 7'}
+            
+        event_name_renames_tsp = \
+            ['Screening', \
+            '3 Month Follow-up', \
+            '12 Month Follow-up', \
+            'Clinical Follow-up 1', \
+            'Clinical Follow-up 2', \
+            'Clinical Follow-up 3', \
+            'Clinical Follow-up 4']
+        
         # form_df.to_csv(os.path.join(output_directory,'form_df_before_event_rename.csv'))
-        form_df['redcap_event_name'] = form_df['redcap_event_name'].replace(
-            ['screening_visit_arm_1', 'initial_scan_visit_arm_1', 'repeat_scan_visit_arm_1', '3_month_follow_up_arm_1', '12_month_follow_up_arm_1'] + [ 'clinical_follow_up_arm_1' + l for l in ['', 'b', 'c', 'd'] ],
-            event_name_renames
-        )
+        form_df['redcap_event_name'] = form_df['redcap_event_name'].replace(to_replace=event_name_mapping)
         rename = 'visit' # rename "redcap_event_name" depending on form
         form_df = form_df.rename(columns={'redcap_event_name': rename})
 
