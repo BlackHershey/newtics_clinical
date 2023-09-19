@@ -613,8 +613,11 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
         #   only report most specific value of symptom checklist timeframe (i.e. 'past week' if both 'past week' and 'lifetime' selected),
         #   ensure consistent values between different visit forms (i.e. make 'past week' always be 2, introduce new code for 'since last visit')
         if form == 'ticscreener01':
-            form_df = form_df.drop(columns=['exp_specify_tics_2_pw'])
-            form_df = split_multiform_row(form_dd_df, nih_dd_directory, form, form_df, update_ticscreener)
+            if 'exp_specify_tics_2_pw' in form_df.columns:
+                form_df = form_df.drop(columns=['exp_specify_tics_2_pw'], errors='ignore')
+                form_df = split_multiform_row(form_dd_df, nih_dd_directory, form, form_df, update_ticscreener)
+            else:
+                pass
 
         # pedsql01
         #   replace version numeric code with string representing version, decrement question scale to 0-4
@@ -632,12 +635,15 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
         # mvhsp01
         #   recode completed_by, and record visit type under version form
         if form == 'mvhsp01':
-            replace_cols = ['med_completed_by', 'med_completed_by_12mo']
-            form_df[replace_cols] = form_df[replace_cols].replace(range(1,5), 8)
-            form_df[replace_cols] = form_df[replace_cols].replace([5, 6], [17, 98])
-            form_df = split_multiform_row(form_dd_df, nih_dd_directory, form, form_df, None)
-            print(form_df.columns)
-            form_df['chf_05'] = form_df['chf_05'].str.slice(0,250)
+            if 'med_completed_by_12mo' in form_df.columns:
+                replace_cols = ['med_completed_by', 'med_completed_by_12mo']
+                form_df[replace_cols] = form_df[replace_cols].replace(range(1,5), 8)
+                form_df[replace_cols] = form_df[replace_cols].replace([5, 6], [17, 98])
+                form_df = split_multiform_row(form_dd_df, nih_dd_directory, form, form_df, None)
+                # print(form_df.columns)
+                form_df['chf_05'] = form_df['chf_05'].str.slice(0,250)
+            else:
+                form_df.drop(columns=['med_completed_by'], errors='ignore')
 
         # puts01
         #   specify that we used 9-item PUTS
@@ -647,6 +653,8 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
         # ygtss01
         #   remove '_past_week' to meet column length limits
         if form == 'ygtss01':
+            # rename some columns
+            form_df =  form_df.rename(columns={'ygtss_motor_tic_score':'ygtss_motor_total', 'ygtss_phonic_tic_score': 'ygtss_phonic_total'})
             long_cols = ['ygtss_past_week_unavailable_list', 'ygtss_past_week_expert_total_tic_score']
             form_df =  form_df.rename({ col: col.replace('past_week_', '') for col in form_df.columns if col in long_cols }, axis=1)
             form_df = split_multiform_row(form_dd_df, nih_dd_directory, form, form_df, update_ygtss)
@@ -672,7 +680,7 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
         # cybocs01
         #   label visit/form type (i.e. worst ever, past week), recode 'past week' to always be 3, add unique code for 'since last visit'
         if form == 'cybocs01':
-            form_df = form_df.drop(columns='comp_counting_12mo') # FIXME: column is meant to be descriptive; remove once we have updated data dict
+            form_df = form_df.drop(columns='comp_counting_12mo', errors='ignore') # FIXME: column is meant to be descriptive; remove once we have updated data dict
             form_df = split_multiform_row(form_dd_df, nih_dd_directory, form, form_df, update_cybocs)
             for col in [ col for col in form_df if 'spec' in col ]:
                 form_df[col] = form_df[col].apply(lambda x: x[:100] if pd.notnull(x) else x)
