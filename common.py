@@ -34,6 +34,6 @@ def get_project_df(project_name, datafile=None, api_db_password=None, fields=Non
 	else:
 		print('PULLING DATA FROM REDCAP FOR {}'.format(project_name))
 		redcap_project = get_redcap_project(project_name, api_db_password)
-		df = redcap_project.export_records(fields=fields, format='df')
+		df = redcap_project.export_records(fields=fields, format_type='df')
 	return df
 
