@@ -48,7 +48,7 @@ Generate file with cells that possibly contain subject PHI -- issueswill need to
 def flag_redcap_phi(study_key, outdir, password, from_date):
 	# get redcap dataframe (from API) and filter out rows we've checked previously (via optional date param)
 	project = get_redcap_project(study_key, password)
-	df = project.export_records(format='df').dropna(how='all', axis=0).drop(columns='demo_dob')
+	df = project.export_records(format_type='df').dropna(how='all', axis=0).drop(columns='demo_dob')
 	df['visit_date'] = pd.to_datetime(df['visit_date'])
 	df = df[df['visit_date'] > from_date]
 
