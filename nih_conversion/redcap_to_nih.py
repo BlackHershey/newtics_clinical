@@ -144,7 +144,7 @@ def ses_primary_partner(row):
 
     if row[mpartner_cols + fpartner_cols].isnull().all():
         return row
-    print('mom_or_dad input = {}: {}'.format(row['demo_study_id'], row['ses_primary_res']))
+    # print('mom_or_dad input = {}: {}'.format(row['demo_study_id'], row['ses_primary_res']))
     try:
         primary_residence = mom_or_dad(row['ses_primary_res'])
     except:
@@ -287,7 +287,7 @@ def split_multiform_row(form_dd_df, nih_dd_directory, nih_form, form_df, update_
     redcap_forms = form_dd_df['form'].unique() # get all REDCap forms that map to NIH form
     for form in redcap_forms:
         form_cols = [ col for col in form_df if col in form_dd_df[form_dd_df['form'] == form].index ] # get all columns for a REDCap form
-        print('\t', form, len(form_cols))
+        # print('\t', form, len(form_cols))
         temp_df = form_df[form_cols + [ col for col in form_df if col not in form_dd_df.index.values ]]
         temp_df = temp_df.dropna(how='all', subset=form_cols) # remove rows that are all null for current pattern (helps with screen/12mo form split)
         for col in form_cols:
@@ -370,7 +370,12 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
     # LoTS doesn't have groups, change this to check for group variable
     if 'incl_excl_grp' in data_df.columns:
         # NewTics
-        data_df[['demo_sex', 'demo_dob', 'incl_excl_grp']] = data_df.groupby('demo_study_id')[['demo_sex', 'demo_dob', 'incl_excl_grp']].apply(lambda x: x.ffill().bfill())
+        # data_df.to_csv('data_df_before_groupby.csv')
+        # print(data_df.index)
+        # new_df = data_df.groupby('demo_study_id', as_index=False)[['demo_sex', 'demo_dob', 'incl_excl_grp']].apply(lambda x: x.ffill().bfill()).reset_index(level=0, drop=True)
+        # new_df.to_csv('data_df_after_groupby.csv')
+        # print(new_df.index)
+        data_df[['demo_sex', 'demo_dob', 'incl_excl_grp']] = data_df.groupby('demo_study_id', as_index=False)[['demo_sex', 'demo_dob', 'incl_excl_grp']].apply(lambda x: x.ffill().bfill()).reset_index(level=0, drop=True)
         data_df['demo_sex'] = data_df['demo_sex'].replace([0, 1], ['F', 'M'])
         data_df['visit_date'] = data_df['visit_date'].fillna(data_df['mo3fupc_date']) # 3 month visit doesn't have the usual visit_date col
     else:
@@ -568,7 +573,9 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
         if form == 'bsmss01':
             form_df = form_df.assign(version_form = np.nan, bsmss03_spouse = np.nan, bsmss07_spouse = np.nan)
             if 'primary_residence' in form_df.columns:
-                form_df.rename(columns={'primary_residence': 'ses_primary_res'})
+                # print('######## replacing primary_residence label #########')
+                form_df = form_df.rename(columns={'primary_residence': 'ses_primary_res'})
+            # form_df.to_csv('form_df_before_ses_fix.csv')
             form_df = form_df.apply(ses_primary_partner, axis=1)
             drop_cols += ['ses_primary_res', 'ses_detail_occ_mother', 'ses_detail_occ_father'] + [ col for col in form_df.columns if col.endswith('partner') ]
 
@@ -798,7 +805,7 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
         if form == 'tsp01':
             drz_score_cols = ['demo_study_id', 'version_form', 'session', 'condition', 'tic_freq', 'tsp_tfi', 'duration', 'data_file1', 'notes']
             drz_score_df = pd.read_csv(os.path.join(BASE_PATH, 'TSP', 'drz_output_with_trainer.csv'), skiprows=0, names=drz_score_cols)
-            print(drz_score_df)
+            # print(drz_score_df)
             drz_score_df['version_form'] = drz_score_df['version_form'].replace(['screen'] + [ str(d) + 'mo' for d in [3,12,24,36,48,60] ], event_name_renames_tsp)
             drz_score_df['visit'] = drz_score_df['version_form']
 
@@ -829,7 +836,7 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
             form_df = form_df.drop(columns=endvisit01_drop_cols, errors='ignore')
 
 
-        if replace_df:
+        if not replace_df.empty:
             # replace specific items that are known to be problematic / missing (documented in cfg/item_level_replacements spreadsheet)
             form_replace_df = replace_df[replace_df['form'] == form]
             form_replace_df['visit_date'] = pd.to_datetime(form_replace_df['visit_date'])
