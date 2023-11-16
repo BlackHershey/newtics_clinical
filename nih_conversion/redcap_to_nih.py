@@ -161,6 +161,19 @@ def ses_primary_partner(row):
 
     return row
 
+"""
+Convert sparse int column
+    Some variables that contain ints for some records but NaN for others are hard to write to CSV as int.
+"""
+def sparse_int_fix(x):
+    try:
+        if '.' in x:
+            return x.split('.')[0]
+        else:
+            return ''
+    except:
+        return ''
+
 
 def add_years_str(row):
     return row + ' years' if str(row).isdigit() else row
@@ -338,7 +351,7 @@ def format_date_str(date_series):
 Convert RedCap data df to NIH csv format
 """
 def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, form_mapping_key, output_directory, item_level_replacements=None, convert_forms=None, fields_to_withhold=None, to_date=None, redo=False):
-    # guid_df = get_guid_df(guid_file, guid_pw)
+    # data_df.to_csv('data_df_before_convert.csv')
 
     # rename guid field to subjectkey
     guid_df = data_df[['guid']]
@@ -347,7 +360,7 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
     # guid_df.to_csv(os.path.join(output_directory, 'guid_df.csv'))
 
     # drop LoTS ineligible
-    if 'incl_excl_eligible' in data_df.columns:
+    if 'incl_excl_eligible' in data_df.columns and 'mo3fupc_date' not in data_df.columns:
         data_df = data_df[(data_df['incl_excl_eligible'] == 1)]
 
     # merge in GUID
@@ -383,7 +396,8 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
         data_df[['demo_sex', 'demo_dob']] = data_df.groupby('demo_study_id')[['demo_sex', 'demo_dob']].apply(lambda x: x.ffill().bfill())
         data_df['demo_sex'] = data_df['demo_sex'].replace([1, 2], ['F', 'M'])
 
-    data_df['visit_date'] = pd.to_datetime(data_df['visit_date'])
+    # data_df.to_csv('data_df_before_visit_date_fix.csv')
+    data_df['visit_date'] = pd.to_datetime(data_df['visit_date'], format='mixed')
     data_df['interview_age'] = (data_df['visit_date'] - pd.to_datetime(data_df['demo_dob'])).apply(lambda x: round(.0328767*x.days) if pd.notnull(x) else np.nan)
 
     if fields_to_withhold:
@@ -426,7 +440,7 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
             'socdemo01': ['cbcl_grade_in_school']
         }
 
-    # data_df.to_csv(os.path.join(output_directory, 'data_df_before_form_loop.csv'))
+    # data_df.to_csv('data_df_before_form_loop.csv')
 
     for form in nih_forms:
         required_fields = [ 'subjectkey', 'visit_date', 'interview_age', 'demo_sex'] # fields shared by every NIH form
@@ -577,6 +591,13 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
                 form_df = form_df.rename(columns={'primary_residence': 'ses_primary_res'})
             # form_df.to_csv('form_df_before_ses_fix.csv')
             form_df = form_df.apply(ses_primary_partner, axis=1)
+
+            # Make some columns ints
+            # form_df['bsmss03_spouse'] = form_df['bsmss03_spouse'].astype('float64', errors='ignore')
+            # form_df['bsmss07_spouse'] = form_df['bsmss07_spouse'].astype('float64', errors='ignore')
+            form_df['bsmss03_spouse'] = form_df['bsmss03_spouse'].astype('str').apply(sparse_int_fix)
+            form_df['bsmss07_spouse'] = form_df['bsmss07_spouse'].astype('str').apply(sparse_int_fix)
+
             drop_cols += ['ses_primary_res', 'ses_detail_occ_mother', 'ses_detail_occ_father'] + [ col for col in form_df.columns if col.endswith('partner') ]
 
         # mab01 (maternal/birth history)
@@ -888,6 +909,10 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
             int_cols = ['matern_no_preg', 'matern_no_births']
             for col in int_cols:
                 form_df[col] = form_df[col].astype('float64', errors='ignore')
+            form_df.to_csv(upload_file, mode='a', index=False, float_format='%d')
+        elif form == 'bsmss01':
+            # print('########### bsmss01 to_csv #############')
+            # print(form_df.dtypes)
             form_df.to_csv(upload_file, mode='a', index=False, float_format='%d')
         else:
             form_df.to_csv(upload_file, mode='a', index=False, float_format='%g')
