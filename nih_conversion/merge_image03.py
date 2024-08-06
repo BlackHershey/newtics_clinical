@@ -16,15 +16,14 @@ def merge_image03(image03_nodemo_csv, dob_csv, other_csv, from_date=None):
     image_df = pd.read_csv(image03_nodemo_csv)
 
     # replace event names
-    event_name_renames = ['Screening', '12 Month Follow-up', 'Initial Clinical Visit', '2 Year Clinical Visit']
-    image_df['visit'] = image_df['visit'].replace(
-        ['screening', '12month', 'baseline', '2YR'],
-        event_name_renames
-    )
+    event_name_shortnames = ['screening', '12month',            'baseline',               'baseline2',              '2YR',                   '2YR2']
+    event_name_longnames =  ['Screening', '12 Month Follow-up', 'Initial Clinical Visit', 'Initial Clinical Visit', '2 Year Clinical Visit', '2 Year Clinical Visit']
+    image_df['visit'] = image_df['visit'].replace(event_name_shortnames,event_name_longnames)
 
     # load RedCap csv with dob
     dob_df = pd.read_csv(dob_csv)
-    dob_df=dob_df.dropna(subset=['demo_dob'])
+    dob_df = dob_df.dropna(subset=['demo_dob'])
+    dob_df = dob_df[['demo_study_id','demo_dob']]
 
     # merge DOB df into image df and calculate age in months for each scan
     image_df = image_df.merge(dob_df, on='demo_study_id')
@@ -42,8 +41,10 @@ def merge_image03(image03_nodemo_csv, dob_csv, other_csv, from_date=None):
 
     # extract GUID (aka subjectkey) and sex from one of the other submission forms and merge into final df
     other_df = pd.read_csv(other_csv, skiprows=1) # skiprows to skip first line (NIH header)
-    other_df = other_df[['demo_study_id', 'sex', 'subjectkey']] 
-    image_df = image_df.merge(other_df, on='demo_study_id')
+    other_df = other_df[['demo_study_id', 'sex', 'subjectkey']].drop_duplicates()
+    image_df = image_df.merge(other_df, on='demo_study_id', how='inner')
+
+    print(image_df)
 
     # write NIH header into file
     outfile = os.path.join(os.path.dirname(image03_nodemo_csv), 'image03.csv')

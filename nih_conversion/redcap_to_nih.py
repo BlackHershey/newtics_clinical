@@ -124,12 +124,28 @@ def age_to_units(row, dest_unit, src_unit=None):
 
 
 def mom_or_dad(response):
-    if re.match('^(mom|mother)', response, flags=re.IGNORECASE):
-        return 1
-    elif re.match('^(dad|father)', response, flags=re.IGNORECASE):
-        return 2
-    else:
-        return np.nan
+    try:
+        if re.match('^(grandma|grandmother|grandpa|grandfather)', response, flags=re.IGNORECASE):
+            return 3
+        elif re.match('^.*(mom|mother)', response, flags=re.IGNORECASE):
+            return 1
+        elif re.match('^.*(dad|father)', response, flags=re.IGNORECASE):
+            return 2
+        else:
+            return 999
+    except:
+        return 999
+
+def respond_code(response):
+    try:
+        if re.match('^(grandma|grandmother|grandpa|grandfather)', response, flags=re.IGNORECASE):
+            return 4
+        elif re.match('^.*(mom|mother|dad|father)', response, flags=re.IGNORECASE):
+            return 1
+        else:
+            return 999
+    except:
+        return 999
 
 
 """
@@ -325,19 +341,19 @@ Replace study staff/doctor names with generic references
     NIH considers our info as PII
 """
 def replace_staff_names(df):
-    subset = [ col for col in df.columns if col != 'subjectkey']
+    # ignore empy columns and the 'subjectkey' (NDAR GUID) column
+    ignore_cols = [col for col in df.columns if df[col].isnull().all()]
+    ignore_cols.append('subjectkey')
+    subset = [ col for col in df.columns if col not in ignore_cols]
 
     # create search string
-    staff_initials = [ 'ECB', 'VM', 'SK', 'KJB', 'SR', 'JH', 'BS' ]
-    staff_names = [ ('Emily', 'Bihun'), ('Vicki', 'Martin'), ('Soyoung', 'Kim'), ('Kevin', 'Black'), ('Samantha', 'Ranck'), ('Jackie', 'Hampton') ]
+    staff_initials = [ 'ECB', 'VM', 'SK', 'KJB', 'SR', 'JH', 'BS', 'JA', 'AA', 'SG', 'LAG', 'NYY' ]
+    staff_names = [ ('Emily', 'Bihun'), ('Vicki', 'Martin'), ('Soyoung', 'Kim'), ('Kevin', 'Black'), ('Samantha', 'Ranck'), ('Jackie', 'Hampton'), ('Jaridd', 'Albert'), ('Amanda', 'Arbuckle'), ('Sarah', 'Grossen'), ('Luis', 'Gonzalez'), ('Nancy', 'Yang') ]
     staff_name_matches = [ '{}(?: {})?'.format(first, last) for first, last in staff_names ] # create regexes of first name with optional last name
     staff_match_str = '|'.join(staff_initials + staff_name_matches)
 
     # replace matches in dataframe
-    df[subset] = df[subset].replace({
-        '({})'.format(staff_match_str): 'rater',
-        '(Dr. ([A-Z][a-z]+){1,2})': 'doctor'
-    }, regex=True)
+    df[subset] = df[subset].replace(to_replace={'({})'.format(staff_match_str): 'rater', '(Dr. ([A-Z][a-z]+){1,2})': 'doctor'}, regex=True)
 
     return df
 
@@ -361,13 +377,15 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
 
     # drop LoTS ineligible
     if 'incl_excl_eligible' in data_df.columns and 'mo3fupc_date' not in data_df.columns:
+        # fill incl_excl_eligible across all visits
+        data_df[['incl_excl_eligible']] = data_df[['incl_excl_eligible']].apply(lambda x: x.ffill().bfill())
+        # select data only from eligible participants
         data_df = data_df[(data_df['incl_excl_eligible'] == 1)]
 
     # merge in GUID
     data_df = data_df.reset_index().join(guid_df, on='demo_study_id', how='left')
-    # data_df.to_csv(os.path.join(output_directory, 'data_df_merged_guid.csv'))
 
-    # drop data from subjects with no GUID
+    # drop data for subjects with no GUID
     data_df = data_df[data_df['subjectkey'].str.contains("NDA", na = False)]
 
     data_dict_df = pd.read_csv(redcap_data_dictionary, index_col=0)
@@ -378,6 +396,8 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
     nih_forms = np.unique(form_map_df.index.values)
     if convert_forms:
         nih_forms = [ form for form in convert_forms if form in nih_forms ]
+
+    # merge guid into data_df
 
     # convert sex codes & calculate interview age
     # LoTS doesn't have groups, change this to check for group variable
@@ -393,7 +413,8 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
         data_df['visit_date'] = data_df['visit_date'].fillna(data_df['mo3fupc_date']) # 3 month visit doesn't have the usual visit_date col
     else:
         # LoTS
-        data_df[['demo_sex', 'demo_dob']] = data_df.groupby('demo_study_id')[['demo_sex', 'demo_dob']].apply(lambda x: x.ffill().bfill())
+        data_df = data_df.set_index(['demo_study_id', 'redcap_event_name'])
+        data_df[['demo_sex', 'demo_dob']] = data_df[['demo_sex', 'demo_dob']].apply(lambda x: x.ffill().bfill())
         data_df['demo_sex'] = data_df['demo_sex'].replace([1, 2], ['F', 'M'])
 
     # data_df.to_csv('data_df_before_visit_date_fix.csv')
@@ -465,7 +486,7 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
         keep_cols = form_cols + required_fields + ['demo_study_id', 'redcap_event_name']
         if form in form_field_map:
             keep_cols += form_field_map[form]
-        form_df = data_df[np.unique(keep_cols)].reset_index().drop(columns='index')
+        form_df = data_df.reset_index()[np.unique(keep_cols)].drop(columns='index', errors='ignore')
         # form_df.to_csv(os.path.join(output_directory,'form_df_after_keep_cols.csv'))
 
         # remove empty rows
@@ -631,10 +652,18 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
             form_df =  sex_norm_srs(form_df, tscore_cols, 'tscore')
             form_df['srs_score'] = np.nan
             form_df['respond_detail'] = form_df['demo_completed_by'].apply(mom_or_dad)
-            form_df['respond'] = np.where(form_df['respond_detail'].isin([1,2]), 1, np.nan)
+            form_df['respond'] = form_df['demo_completed_by'].apply(respond_code)
             for col in ['respond', 'respond_detail']:
                 form_df[col] = form_df[col].replace(1.0,'1')
                 form_df[col] = form_df[col].replace(2.0,'2')
+                form_df[col] = form_df[col].replace(3.0,'3')
+                form_df[col] = form_df[col].replace(4.0,'4')
+                form_df[col] = form_df[col].replace(5.0,'5')
+                form_df[col] = form_df[col].replace(6.0,'6')
+                form_df[col] = form_df[col].replace(7.0,'7')
+                form_df[col] = form_df[col].replace(8.0,'8')
+                form_df[col] = form_df[col].replace(9.0,'9')
+                form_df[col] = form_df[col].replace(999.0,'999')
             form_df = form_df.drop(columns='demo_completed_by')
 
         # ticscreener01
@@ -857,7 +886,7 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
             form_df = form_df.drop(columns=endvisit01_drop_cols, errors='ignore')
 
 
-        if not replace_df.empty:
+        if replace_df:
             # replace specific items that are known to be problematic / missing (documented in cfg/item_level_replacements spreadsheet)
             form_replace_df = replace_df[replace_df['form'] == form]
             form_replace_df['visit_date'] = pd.to_datetime(form_replace_df['visit_date'])
