@@ -124,12 +124,28 @@ def age_to_units(row, dest_unit, src_unit=None):
 
 
 def mom_or_dad(response):
-    if re.match('^(mom|mother)', response, flags=re.IGNORECASE):
-        return 1
-    elif re.match('^(dad|father)', response, flags=re.IGNORECASE):
-        return 2
-    else:
-        return np.nan
+    try:
+        if re.match('^(grandma|grandmother|grandpa|grandfather)', response, flags=re.IGNORECASE):
+            return 3
+        elif re.match('^.*(mom|mother)', response, flags=re.IGNORECASE):
+            return 1
+        elif re.match('^.*(dad|father)', response, flags=re.IGNORECASE):
+            return 2
+        else:
+            return 999
+    except:
+        return 999
+
+def respond_code(response):
+    try:
+        if re.match('^(grandma|grandmother|grandpa|grandfather)', response, flags=re.IGNORECASE):
+            return 4
+        elif re.match('^.*(mom|mother|dad|father)', response, flags=re.IGNORECASE):
+            return 1
+        else:
+            return 999
+    except:
+        return 999
 
 
 """
@@ -631,10 +647,18 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
             form_df =  sex_norm_srs(form_df, tscore_cols, 'tscore')
             form_df['srs_score'] = np.nan
             form_df['respond_detail'] = form_df['demo_completed_by'].apply(mom_or_dad)
-            form_df['respond'] = np.where(form_df['respond_detail'].isin([1,2]), 1, np.nan)
+            form_df['respond'] = form_df['demo_completed_by'].apply(respond_code)
             for col in ['respond', 'respond_detail']:
                 form_df[col] = form_df[col].replace(1.0,'1')
                 form_df[col] = form_df[col].replace(2.0,'2')
+                form_df[col] = form_df[col].replace(3.0,'3')
+                form_df[col] = form_df[col].replace(4.0,'4')
+                form_df[col] = form_df[col].replace(5.0,'5')
+                form_df[col] = form_df[col].replace(6.0,'6')
+                form_df[col] = form_df[col].replace(7.0,'7')
+                form_df[col] = form_df[col].replace(8.0,'8')
+                form_df[col] = form_df[col].replace(9.0,'9')
+                form_df[col] = form_df[col].replace(999.0,'999')
             form_df = form_df.drop(columns='demo_completed_by')
 
         # ticscreener01
