@@ -341,19 +341,19 @@ Replace study staff/doctor names with generic references
     NIH considers our info as PII
 """
 def replace_staff_names(df):
-    subset = [ col for col in df.columns if col != 'subjectkey']
+    # ignore empy columns and the 'subjectkey' (NDAR GUID) column
+    ignore_cols = [col for col in df.columns if df[col].isnull().all()]
+    ignore_cols.append('subjectkey')
+    subset = [ col for col in df.columns if col not in ignore_cols]
 
     # create search string
-    staff_initials = [ 'ECB', 'VM', 'SK', 'KJB', 'SR', 'JH', 'BS' ]
-    staff_names = [ ('Emily', 'Bihun'), ('Vicki', 'Martin'), ('Soyoung', 'Kim'), ('Kevin', 'Black'), ('Samantha', 'Ranck'), ('Jackie', 'Hampton') ]
+    staff_initials = [ 'ECB', 'VM', 'SK', 'KJB', 'SR', 'JH', 'BS', 'JA', 'AA', 'SG', 'LAG', 'NYY' ]
+    staff_names = [ ('Emily', 'Bihun'), ('Vicki', 'Martin'), ('Soyoung', 'Kim'), ('Kevin', 'Black'), ('Samantha', 'Ranck'), ('Jackie', 'Hampton'), ('Jaridd', 'Albert'), ('Amanda', 'Arbuckle'), ('Sarah', 'Grossen'), ('Luis', 'Gonzalez'), ('Nancy', 'Yang') ]
     staff_name_matches = [ '{}(?: {})?'.format(first, last) for first, last in staff_names ] # create regexes of first name with optional last name
     staff_match_str = '|'.join(staff_initials + staff_name_matches)
 
     # replace matches in dataframe
-    df[subset] = df[subset].replace({
-        '({})'.format(staff_match_str): 'rater',
-        '(Dr. ([A-Z][a-z]+){1,2})': 'doctor'
-    }, regex=True)
+    df[subset] = df[subset].replace(to_replace={'({})'.format(staff_match_str): 'rater', '(Dr. ([A-Z][a-z]+){1,2})': 'doctor'}, regex=True)
 
     return df
 
