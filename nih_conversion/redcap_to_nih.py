@@ -377,13 +377,15 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
 
     # drop LoTS ineligible
     if 'incl_excl_eligible' in data_df.columns and 'mo3fupc_date' not in data_df.columns:
+        # fill incl_excl_eligible across all visits
+        data_df[['incl_excl_eligible']] = data_df[['incl_excl_eligible']].apply(lambda x: x.ffill().bfill())
+        # select data only from eligible participants
         data_df = data_df[(data_df['incl_excl_eligible'] == 1)]
 
     # merge in GUID
     data_df = data_df.reset_index().join(guid_df, on='demo_study_id', how='left')
-    # data_df.to_csv(os.path.join(output_directory, 'data_df_merged_guid.csv'))
 
-    # drop data from subjects with no GUID
+    # drop data for subjects with no GUID
     data_df = data_df[data_df['subjectkey'].str.contains("NDA", na = False)]
 
     data_dict_df = pd.read_csv(redcap_data_dictionary, index_col=0)
@@ -394,6 +396,8 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
     nih_forms = np.unique(form_map_df.index.values)
     if convert_forms:
         nih_forms = [ form for form in convert_forms if form in nih_forms ]
+
+    # merge guid into data_df
 
     # convert sex codes & calculate interview age
     # LoTS doesn't have groups, change this to check for group variable
@@ -409,7 +413,8 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
         data_df['visit_date'] = data_df['visit_date'].fillna(data_df['mo3fupc_date']) # 3 month visit doesn't have the usual visit_date col
     else:
         # LoTS
-        data_df[['demo_sex', 'demo_dob']] = data_df.groupby('demo_study_id')[['demo_sex', 'demo_dob']].apply(lambda x: x.ffill().bfill())
+        data_df = data_df.set_index(['demo_study_id', 'redcap_event_name'])
+        data_df[['demo_sex', 'demo_dob']] = data_df[['demo_sex', 'demo_dob']].apply(lambda x: x.ffill().bfill())
         data_df['demo_sex'] = data_df['demo_sex'].replace([1, 2], ['F', 'M'])
 
     # data_df.to_csv('data_df_before_visit_date_fix.csv')
@@ -481,7 +486,7 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
         keep_cols = form_cols + required_fields + ['demo_study_id', 'redcap_event_name']
         if form in form_field_map:
             keep_cols += form_field_map[form]
-        form_df = data_df[np.unique(keep_cols)].reset_index().drop(columns='index')
+        form_df = data_df.reset_index()[np.unique(keep_cols)].drop(columns='index', errors='ignore')
         # form_df.to_csv(os.path.join(output_directory,'form_df_after_keep_cols.csv'))
 
         # remove empty rows
@@ -881,7 +886,7 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
             form_df = form_df.drop(columns=endvisit01_drop_cols, errors='ignore')
 
 
-        if not replace_df.empty:
+        if replace_df:
             # replace specific items that are known to be problematic / missing (documented in cfg/item_level_replacements spreadsheet)
             form_replace_df = replace_df[replace_df['form'] == form]
             form_replace_df['visit_date'] = pd.to_datetime(form_replace_df['visit_date'])
