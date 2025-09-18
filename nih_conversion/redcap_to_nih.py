@@ -603,6 +603,44 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
             form_df['demo_mat_edu'] = form_df['demo_mat_edu'].apply(add_years_str).str.slice(0,20)
             form_df['demo_pat_edu'] = form_df['demo_pat_edu'].apply(add_years_str).str.slice(0,20)
 
+         # bisbas01
+            # replace field names
+        if form == 'bisbas01':
+            # Rename only specified bisbas_ columns to bb_
+            bisbas_cols_to_rename = [
+                'bisbas_child_scr_bas_dr',
+                'bisbas_child_scr_bas_dr_mean',
+                'bisbas_child_scr_bas_fs',
+                'bisbas_child_scr_bas_fs_mean',
+                'bisbas_child_scr_bas_rr',
+                'bisbas_child_scr_bas_rr_mean',
+                'bisbas_child_scr_bis',
+                'bisbas_child_scr_bis_mean',
+                'bisbas_prnt_scr_bas_drive',
+                'bisbas_prnt_scr_bas_drive_mean',
+                'bisbas_prnt_scr_bas_reward',
+                'bisbas_prnt_scr_bas_reward_mean',
+                'bisbas_prnt_scr_bis_mean',
+                'bisbas_prnt_scr_bis_raw',
+                'bisbas_prnt_scr_fun',
+                'bisbas_prnt_scr_fun_mean'
+            ]
+            rename_dict = {col: col.replace('bisbas_', 'bb_') for col in bisbas_cols_to_rename if col in form_df.columns}
+            if 'demo_study_id' in form_df.columns:
+                rename_dict['demo_study_id'] = 'src_subject_id'
+            form_df = form_df.rename(columns=rename_dict)
+
+            # Add version_form column based on bis_bas_child_1 value
+            if 'bis_bas_child_1' in form_df.columns:
+                form_df['version_form'] = form_df['bis_bas_child_1'].apply(lambda x: 'child form' if pd.notnull(x) and isinstance(x, (int, float)) and x > 0 else 'parent form')
+
+        # cash_choice01
+        #   replace field names
+        if form == 'cash_choice01':
+            rename_dict = {}
+            if 'demo_study_id' in form_df.columns:
+                rename_dict['demo_study_id'] = 'src_subject_id'
+            form_df = form_df.rename(columns=rename_dict)
         # bsmss01 (ses)
         #   only report partner info for 'primary residence' parent's partner, remove occ details because of PHI issues
         if form == 'bsmss01':
@@ -707,6 +745,11 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
         if form == 'puts01':
             form_df['version_form'] = '9-item PUTS'
 
+        # pds01
+        #   add column 'respond', all values of 999 (respondent not specified)
+        if form == 'pds01':
+            form_df['respond'] = 999
+
         # ygtss01
         #   remove '_past_week' to meet column length limits
         if form == 'ygtss01':
@@ -727,6 +770,7 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
             # remove columns that are not in the NDAR data dictionary
             erd_tics01_drop_cols = [
                 'expert_diagnosis_dsto', 
+                'expert_diagnosis_rater',
                 'expert_diagnosis_tic_age_2', 
                 'expert_diagnosis_tic_onset', 
                 'expert_ts_dx_dsmiv', 
@@ -833,6 +877,16 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
             form_df[guideline_cols] = form_df[guideline_cols].apply(lambda x: x.str.lower())
             guideline_cols.remove('cpt_hit_rt_guideline')
             form_df[guideline_cols] = form_df[guideline_cols].replace('within average range', 'within the average range')
+            # Clean up cpt_commissions_pctile and cpt_detectability_pctile: convert '65th' -> 65
+            for col in ['cpt_commissions_pctile', 'cpt_detectability_pctile', 'cpt_hit_rt_pctile', 'cpt_omissions_pctile', 'cpt_hit_rt_block_change_pctile', 'cpt_hit_rt_isi_change_pctile', 'cpt_hit_rt_std_error_pctile', 'cpt_perseverations_pctile', 'cpt_variability_pctile', 'cpt_detectability_t']:
+                if col in form_df.columns:
+                    form_df[col] = form_df[col].astype(str).str.extract(r'(\d+)').astype(float).astype('Int64')
+
+            # For cpt_commissions_n and cpt_omissions_n, extract number before %
+            for col in ['cpt_commissions_n', 'cpt_omissions_n', 'cpt_perseverations_n']:
+                if col in form_df.columns:
+                    form_df[col] = form_df[col].astype(str).str.extract(r'(\d+)').astype(float).astype('Int64')
+
 
         # sldc01
         #   Split adhd comb/inatt/hyper fields into separate upload files
