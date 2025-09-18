@@ -45,10 +45,15 @@ def check_phi(df, lookup_string):
 """
 Generate file with cells that possibly contain subject PHI -- issueswill need to be corrected in REDCap prior to data sharing
 """
-def flag_redcap_phi(study_key, outdir, password, from_date):
+def flag_redcap_phi(study_key, data_file, outdir, password, from_date):
 	# get redcap dataframe (from API) and filter out rows we've checked previously (via optional date param)
-	project = get_redcap_project(study_key, password)
-	df = project.export_records(format_type='df').dropna(how='all', axis=0).drop(columns='demo_dob')
+	if data_file:
+		print('GETTING DATA FROM CSV {}'.format(data_file))
+		df = pd.read_csv(data_file, index_col=[0,1]).dropna(how='all', axis=0).drop(columns='demo_dob')
+	else:
+		print('PULLING DATA FROM REDCAP FOR {}'.format(study_key))
+		project = get_redcap_project(study_key, password)
+		df = project.export_records(format_type='df').dropna(how='all', axis=0).drop(columns='demo_dob')
 	df['visit_date'] = pd.to_datetime(df['visit_date'])
 	df = df[df['visit_date'] > from_date]
 
@@ -67,11 +72,12 @@ if __name__ == '__main__':
 	@Gooey
 	def parse_args():
 		parser = GooeyParser()
-		parser.add_argument('study', choices=['nt','r01'])
+		parser.add_argument('study', choices=['nt','r01', 'lots'])
+		parser.add_argument('data_file', widget='FileChooser', help='RedCap data export CSV (if not pulling from API)')
 		parser.add_argument('outdir', widget='DirChooser', help='where to store output CSV')
 		parser.add_argument('db_password', widget='PasswordField', help='password for recruitment database')
 		parser.add_argument('--from_date', widget='DateChooser', type=lambda d: datetime.strptime(d, '%Y-%m-%d'), help='only check visits from this date on')
 		return parser.parse_args()
 
 	args = parse_args()
-	flag_redcap_phi(args.study, args.outdir, args.db_password, args.from_date)
+	flag_redcap_phi(args.study, args.data_file, args.outdir, args.db_password, args.from_date)
