@@ -660,8 +660,10 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
             drop_cols += ['ses_primary_res', 'ses_detail_occ_mother', 'ses_detail_occ_father'] + [ col for col in form_df.columns if col.endswith('partner') ]
 
         # mab01 (maternal/birth history)
-        #   remove 'unknown' code for apgar responses, convert the task ages to months, make gest_wks is an integer
+        #   remove 'unknown' code for apgar responses, convert the task ages to months, make gest_wks is an integer, 
+        #   combine multiple npd1 (non-prescription drugs) into matern_preg_meds_oth
         if form == 'mab01':
+            form_df.to_csv('mab01_before_cleanup.csv')
             form_df['matern_no_preg'] = form_df['matern_no_preg'].replace('unknown', np.nan).astype(float) # 'unknown' strings break output type -- convert to float after correction
             form_df['matern_no_preg'] = form_df['matern_no_preg'].astype('int', errors='ignore')
             form_df['matern_no_births'] = form_df['matern_no_births'].astype('int', errors='ignore')
@@ -672,6 +674,56 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
             matern_age_tsks = [ 'matern_' + col for col in ['hld_head', 'rll_ovr', 'toy_reach', 'sat_up', 'fing_fed', 'crawl', 'pull_to_stand', 'walk', 'slf_fed', 'tlk_wrd_combo'] ]
             form_df[matern_age_tsks] = form_df[matern_age_tsks].apply(age_to_units, args=(AgeUnits.MONTHS,), axis=1)
 
+        # Combine matern_othr_npd1* fields into matern_preg_meds_oth (limit 300 chars)
+        npd1_cols = [col for col in form_df.columns if col.startswith('matern_othr_npd1')]
+        # Exclude 'matern_othr_npd1' from combination, use as flag only
+        combine_cols = [col for col in npd1_cols if col not in ['matern_othr_npd1']]
+        when_map = {
+            '1': 'before preg',
+            '2': '1st tri',
+            '3': '2nd tri',
+            '4': '3rd tri'
+        }
+        days_map = {
+            1: 'Used every day',
+            2: 'Used 5-6 days/wk',
+            3: 'Used 3-4 days/wk',
+            4: 'Used 2 days/wk',
+            5: 'Used 1 day/wk',
+            6: 'Used less than 1 day/wk'
+        }
+        def combine_npd1(row):
+            if 'matern_othr_npd1' in row and row['matern_othr_npd1'] == 1:
+                parts = []
+                # Add spec
+                if 'matern_othr_npd1_spec' in row and pd.notnull(row['matern_othr_npd1_spec']):
+                    parts.append(str(row['matern_othr_npd1_spec']))
+                # Add when (single column, semi-colon separated)
+                if 'matern_othr_npd1_when' in row and pd.notnull(row['matern_othr_npd1_when']):
+                    whens = str(row['matern_othr_npd1_when']).split(';')
+                    when_labels = [when_map.get(w.strip()) for w in whens if w.strip() in when_map]
+                    if when_labels:
+                        parts.append('Used ' + ', '.join(when_labels))
+                # Add days mapping
+                if 'matern_othr_npd1_days' in row and pd.notnull(row['matern_othr_npd1_days']):
+                    days_val = row['matern_othr_npd1_days']
+                    try:
+                        days_val_int = int(days_val)
+                        if days_val_int in days_map:
+                            parts.append(days_map[days_val_int])
+                    except:
+                        pass
+                # Add other npd1 columns (excluding spec, when, days, and flag)
+                for col in combine_cols:
+                    if col not in ['matern_othr_npd1_spec', 'matern_othr_npd1_when', 'matern_othr_npd1_days']:
+                        if pd.notnull(row[col]) and str(row[col]).strip() != '':
+                            parts.append(str(row[col]))
+                combined = '; '.join(parts)[:300]
+                return combined
+            else:
+                return ''
+        form_df['matern_preg_meds_oth'] = form_df.apply(combine_npd1, axis=1)
+        form_df = form_df.drop(columns=npd1_cols, errors='ignore')
         # tichist01 (family history)
         #   remove relative_ from fh columns to fit within character limit
         if form == 'tichist01':
@@ -961,6 +1013,10 @@ def convert_redcap_to_nih(data_df, redcap_data_dictionary, nih_dd_directory, for
             form_df = form_df[form_df['visit_date'] > datetime(2017, 8, 1)] # remove pre-R01 rows
 
         form_df['visit_date'] = format_date_str(form_df['visit_date']) # (after all date comparisons) revert visit date to required string format
+
+        # if bisbas01, rename visit_date to interview_date
+        if form == 'bisbas01' or form == 'cash_choice01' and 'visit_date' in form_df.columns:
+            form_df = form_df.rename(columns={'visit_date': 'interview_date'})
 
         # write out data to separate NIH form files
         form_df = form_df.drop(columns=drop_cols + [col for col in form_df.columns if col.endswith('_complete')], errors='ignore')
