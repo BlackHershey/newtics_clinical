@@ -284,6 +284,75 @@ combined['nt_group'] = combined.apply(get_group, axis=1)
 group = combined.pop('nt_group')
 combined.insert(0,'nt_group', group)
 
+# --- Determine current tic diagnosis fields per `reading_dx_from_redcap.md` rules ---
+def determine_tic_dx_fields(row):
+    # Map expert diagnosis codes to current diagnosis labels
+    tourette = row.get('expert_diagnosis_tourette') if 'expert_diagnosis_tourette' in row.index else None
+    chronic = row.get('expert_diagnosis_chronic_tics') if 'expert_diagnosis_chronic_tics' in row.index else None
+    transient = row.get('expert_diagnosis_transient') if 'expert_diagnosis_transient' in row.index else None
+
+    dx = np.nan
+    # prefer 'present' (1) over 'subthreshold' (2)
+    try:
+        # first check for explicit present (1) in priority order
+        if tourette == 1:
+            dx = 'TS'
+        elif chronic == 1:
+            dx = 'CMTD'
+        elif transient == 1:
+            dx = 'PTD'
+        else:
+            # if none are '1', fall back to subthreshold (2) in same priority
+            if tourette == 2:
+                dx = 'TS-subthreshold'
+            elif chronic == 2:
+                dx = 'CMTD-subthreshold'
+            elif transient == 2:
+                dx = 'PTD-subthreshold'
+    except Exception:
+        dx = np.nan
+
+    # Check control/inclusion flags if no diagnosis found
+    if (pd.isna(dx) or dx is np.nan):
+        # pre-R01 form name (if present) that indicated control enrollment
+        if 'incl_excl_control' in row.index and row['incl_excl_control'] in (1, 2):
+            dx = 'none'
+        # R01 form name: incl_excl_grp where 3 == TFC (control)
+        elif 'incl_excl_grp' in row.index and row['incl_excl_grp'] == 3:
+            dx = 'none'
+
+    # Determine criteria, source and date
+    criteria = 'DSM-5' if not pd.isna(dx) else np.nan
+
+    # prefer common candidate columns for clinician/source
+    source_candidates = ['clinician', 'expert_diagnosis_clinician', 'tsp_rater', 'tsp_rater_name']
+    source = np.nan
+    for col in source_candidates:
+        if col in row.index and pd.notna(row[col]):
+            source = row[col]
+            break
+
+    # visit date from visit info
+    visit_date = row.get('visit_date') if 'visit_date' in row.index else np.nan
+
+    return pd.Series({
+        'tic_diagnosis_current': dx,
+        'tic_dx_current_criteria': criteria,
+        'tic_dx_current_source': source,
+        'tic_dx_current_date': visit_date
+    })
+
+# Apply the function and attach fields to `combined`
+tic_dx_df = combined.apply(determine_tic_dx_fields, axis=1)
+combined = pd.concat([combined, tic_dx_df], axis=1)
+
+# Log rows that need human review (no dx and no clear control flag)
+needs_review = combined[pd.isna(combined['tic_diagnosis_current']) & combined['demo_study_id'].notna()]
+if len(needs_review) > 0:
+    print(f"\n{len(needs_review)} visits need human review for tic diagnosis (no automatic mapping). Sample rows:")
+    print(needs_review[['demo_study_id', 'redcap_event_name', 'incl_excl_grp', 'incl_excl_control', 'expert_diagnosis_tourette', 'expert_diagnosis_chronic_tics', 'expert_diagnosis_transient']].head(10))
+
+
 
 # ### Choose "best" YGTSS score for each visit
 # (post-TSP if available; otherwise pre-TSP)
