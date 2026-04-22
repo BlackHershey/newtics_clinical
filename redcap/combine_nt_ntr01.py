@@ -14,30 +14,31 @@ import pandas as pd
 pd.options.mode.chained_assignment = None
 import numpy as np
 from datetime import datetime
+from pathlib import Path
 
 # define user and current date
-user = "grossens"
+# use Path.home() so the script doesn't hard-code the Windows username
+home = Path.home()
+user = home.name
 current_date = datetime.now().strftime("%Y_%m_%d")
 
 ## import spreadsheets from various data sources
 # nt preR01 REDCap data
-nt = pd.read_csv('C:/Users/'+user+'/Box/Black_Lab/projects/TS/NewTics/Data/Raw_Data/REDCap backup/NewTics_DATA_2024-09-05_1401.csv', \
-                 low_memory=False)
+nt = pd.read_csv(home / 'Box' / 'Black_Lab' / 'projects' / 'TS' / 'NewTics' / 'Data' / 'Raw_Data' / 'REDCap backup' / 'NewTics_DATA_2024-09-05_1401.csv', low_memory=False)
 # nt R01 REDCap data
-r01 = pd.read_csv('C:/Users/'+user+'/Box/Black_Lab/projects/TS/New_Tics_R01/Data/analysis/DS/r01_combine/NewTicsR01_DATA_2024-09-05_1400.csv', \
-                  low_memory=False)
+r01 = pd.read_csv(home / 'Box' / 'Black_Lab' / 'projects' / 'TS' / 'New_Tics_R01' / 'Data' / 'analysis' / 'DS' / 'r01_combine' / 'NewTicsR01_DATA_2024-09-05_1400.csv', low_memory=False)
 # weather data
-weather = pd.read_csv('C:/Users/'+user+'/Box/Black_Lab/projects/TS/New_Tics_R01/Data/analysis/DS/r01_combine/weather_result.csv')
+weather = pd.read_csv(home / 'Box' / 'Black_Lab' / 'projects' / 'TS' / 'New_Tics_R01' / 'Data' / 'analysis' / 'DS' / 'r01_combine' / 'weather_result.csv')
 # nt preR01 CBCL data
-nt_cbcl = pd.read_csv('C:/Users/'+user+'/Box/Black_Lab/projects/TS/NewTics/Data/Raw_Data/CBCL/scores/nt_cbcl_scores.csv')
+nt_cbcl = pd.read_csv(home / 'Box' / 'Black_Lab' / 'projects' / 'TS' / 'NewTics' / 'Data' / 'Raw_Data' / 'CBCL' / 'scores' / 'nt_cbcl_scores.csv')
 nt_cbcl['redcap_event_name'] = nt_cbcl['redcap_event_name'].str.replace('12mo', '12_month_follow_up_arm_1')
 nt_cbcl['redcap_event_name'] = nt_cbcl['redcap_event_name'].str.replace('screen', 'screening_visit_arm_1')
 nt_cbcl['demo_study_id'] = nt_cbcl['demo_study_id'].str.upper()
 # cpt data
-cpt = pd.read_csv('C:/Users/'+user+'/Box/Black_Lab/projects/TS/New_Tics_R01/Data/analysis/DS/r01_combine/cpt_result.csv')
+cpt = pd.read_csv(home / 'Box' / 'Black_Lab' / 'projects' / 'TS' / 'New_Tics_R01' / 'Data' / 'analysis' / 'DS' / 'r01_combine' / 'cpt_result.csv')
 
 ## import file with information about how the NT and NTR01 REDCap fields overlap
-REDCap_field_matching = pd.read_excel('C:/Users/'+user+'/Box/Black_Lab/projects/TS/New_Tics_R01/Data/analysis/DS/r01_combine/matching_NT_and_NTR01_REDCap_fields.xlsx')
+REDCap_field_matching = pd.read_excel(home / 'Box' / 'Black_Lab' / 'projects' / 'TS' / 'New_Tics_R01' / 'Data' / 'analysis' / 'DS' / 'r01_combine' / 'matching_NT_and_NTR01_REDCap_fields.xlsx')
 
 ## make sure coding for the same data if coming from multiple possible forms (for example: srs* and srs_800*)
 # maternal and familty history
@@ -263,7 +264,7 @@ combined['srs_total_t'] = combined.apply(lambda x: 90 if (x['demo_sex'] == 0 and
 
 
 ## get group information
-recruit_data = pd.read_csv('C:/Users/'+user+'/Box/Black_Lab/projects/TS/New_Tics_R01/Data/analysis/DS/r01_combine/nih_recruitment.csv', \
+recruit_data = pd.read_csv(home / 'Box' / 'Black_Lab' / 'projects' / 'TS' / 'New_Tics_R01' / 'Data' / 'analysis' / 'DS' / 'r01_combine' / 'nih_recruitment.csv', \
                            encoding = 'latin1', sep='\t')
     
 nt_group = recruit_data[['NewTicsID', 'TS_type', 'Group']].set_index('NewTicsID').T.to_dict('list')
@@ -506,7 +507,7 @@ combined['pedsql_total_scaled'] = combined.apply(pedsql_total_scaled, axis=1)
 # ### Tics in neck?
 tic_neck = combined[(combined['ts_dci_score_9'] == 1) & (combined['ts_dci_score_12'] == 0)]
 t_neck = tic_neck[['demo_study_id', 'redcap_event_name', 'drz_tics_bf_bselne', 'drz_tics_1st_bselne', 'drz_tics_aftr_1st_bselne']]
-manual_rate_neck_tic = pd.read_excel('C:/Users/'+user+'/Box/Black_Lab/projects/TS/New_Tics_R01/Data/analysis/DS/r01_combine/tics_below_neck.xlsx')
+manual_rate_neck_tic = pd.read_excel(home / 'Box' / 'Black_Lab' / 'projects' / 'TS' / 'New_Tics_R01' / 'Data' / 'analysis' / 'DS' / 'r01_combine' / 'tics_below_neck.xlsx')
 combined = combined.merge(manual_rate_neck_tic, on=('demo_study_id', 'redcap_event_name', 'drz_tics_bf_bselne', 'drz_tics_1st_bselne', 'drz_tics_aftr_1st_bselne' ), how='left')
 combined.drop(columns=['Unnamed: 0'], inplace=True)
 
@@ -539,7 +540,7 @@ combined['tic_below_neck'] = combined.apply(tic_below_neck, axis=1)
 
 
 # ### TSP
-tic_timer = pd.read_csv('C:/Users/'+user+'/Box/Black_Lab/projects/TS/New_Tics_R01/Data/TSP/tic_timer_data.csv')
+tic_timer = pd.read_csv(home / 'Box' / 'Black_Lab' / 'projects' / 'TS' / 'New_Tics_R01' / 'Data' / 'TSP' / 'tic_timer_data.csv')
 data = {'demo_study_id': [], 'redcap_event_name':[], 'baseline_tic_freq': [], 'verbal_tic_freq': [], 'drz_tic_freq': [], 'ncr_tic_freq' :[],
         'baseline_reward_freq': [], 'verbal_reward_freq': [], 'drz_reward_freq': [], 'ncr_reward_freq': []}
 
