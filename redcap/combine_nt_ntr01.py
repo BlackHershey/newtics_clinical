@@ -676,11 +676,10 @@ for index, row in tic_timer.iterrows():
                 ncr_duration = 1
             subj = {'demo_study_id': current_subj, 'redcap_event_name': current_event, 'baseline_tic_freq': calculate_freq(baseline_tic, baseline_duration), 'verbal_tic_freq': calculate_freq(verbal_tic, verbal_duration),
                'drz_tic_freq': calculate_freq(drz_tic, drz_duration), 'ncr_tic_freq': calculate_freq(ncr_tic, ncr_duration), 'baseline_10s_freq': calculate_freq(baseline_reward, baseline_duration), 'verbal_10s_freq': calculate_freq(verbal_reward,verbal_duration), 'drz_10s_freq': calculate_freq(drz_reward, drz_duration), 'ncr_10s_freq': calculate_freq(ncr_reward, ncr_duration), 'tsp_date': date, 'tsp_rater': 'live'}
-            tic_timer_calc = tic_timer_calc.append(subj, ignore_index = True)
+            tic_timer_calc = pd.concat([tic_timer_calc, pd.DataFrame([subj])], ignore_index=True)
     else:
-        subj = {'demo_study_id': current_subj, 'redcap_event_name': current_event, 'baseline_tic_freq': calculate_freq(baseline_tic, baseline_duration), 'verbal_tic_freq': calculate_freq(verbal_tic, verbal_duration),
-               'drz_tic_freq': calculate_freq(drz_tic, drz_duration), 'ncr_tic_freq': calculate_freq(ncr_tic, ncr_duration), 'baseline_10s_freq': calculate_freq(baseline_reward, baseline_duration), 'verbal_10s_freq': calculate_freq(verbal_reward,verbal_duration), 'drz_10s_freq': calculate_freq(drz_reward, drz_duration), 'ncr_10s_freq': calculate_freq(ncr_reward, ncr_duration), 'tsp_date': date, 'tsp_rater': 'live'}
-        tic_timer_calc = tic_timer_calc.append(subj, ignore_index = True)
+        subj = {'demo_study_id': current_subj, 'redcap_event_name': current_event, 'baseline_tic_freq': calculate_freq(baseline_tic, baseline_duration), 'verbal_tic_freq': calculate_freq(verbal_tic, verbal_duration), 'drz_tic_freq': calculate_freq(drz_tic, drz_duration), 'ncr_tic_freq': calculate_freq(ncr_tic, ncr_duration), 'baseline_10s_freq': calculate_freq(baseline_reward, baseline_duration), 'verbal_10s_freq': calculate_freq(verbal_reward,verbal_duration), 'drz_10s_freq': calculate_freq(drz_reward, drz_duration), 'ncr_10s_freq': calculate_freq(ncr_reward, ncr_duration), 'tsp_date': date, 'tsp_rater': 'live'}
+        tic_timer_calc = pd.concat([tic_timer_calc, pd.DataFrame([subj])], ignore_index=True)
         current_subj = row['demo_study_id']
         current_event = row['redcap_event_name']
         baseline_tic = 0
