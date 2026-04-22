@@ -409,6 +409,145 @@ def calculate_peg_handedness(x):
 combined['peg_handedness'] = combined.apply(calculate_peg_handedness, axis=1)
 combined['peg_score'] = combined.apply(lambda x: x['peg_right_30s'] if x['peg_handedness'] == 'R' else x['peg_left_30s'], axis=1)
 
+# --- Compute `race` column from demo_race___1..7 (based on screening visit) ---
+race_cols = [f'demo_race___{i}' for i in range(1, 8)]
+# helper to determine race from a single row (screening)
+def _race_from_row(row):
+    vals = []
+    for c in race_cols:
+        if c in row.index:
+            try:
+                v = row[c]
+            except Exception:
+                v = None
+        else:
+            v = None
+        # treat NaN as 0 / missing
+        if pd.isna(v):
+            vals.append(0)
+        else:
+            try:
+                vals.append(int(v))
+            except Exception:
+                # non-integer values -> treat as 0
+                vals.append(0)
+
+    # count positive selections
+    positives = sum(1 for v in vals if v > 0)
+    if positives > 1:
+        return 'More than one race'
+    # map single selection
+    mapping = {
+        1: 'American Indian/Alaska Native',
+        2: 'Asian',
+        3: 'Hawaiian or Pacific Islander',
+        4: 'Black',
+        5: 'White',
+        6: 'More than one race',
+        7: 'Unknown'
+    }
+    for idx, v in enumerate(vals, start=1):
+        if v > 0:
+            return mapping.get(idx, 'Unknown')
+    # no selection
+    return 'Unknown or not reported'
+
+# build mapping of demo_study_id -> race using screening visit
+race_map = {}
+if 'demo_study_id' in combined.columns:
+    screening = combined.loc[combined['redcap_event_name'] == 'screening_visit_arm_1'] if 'redcap_event_name' in combined.columns else combined.iloc[0:0]
+    for sid, group in screening.groupby('demo_study_id'):
+        # try to find first non-empty race from screening rows for subject
+        assigned = None
+        for _, r in group.iterrows():
+            assigned = _race_from_row(r)
+            if assigned is not None:
+                break
+        race_map[sid] = assigned if (assigned is not None) else 'Unknown or not reported'
+
+# default for subjects without screening entry
+default_race = 'Unknown or not reported'
+
+# map to combined; ensure all rows get a race value copied from screening
+combined['race'] = combined['demo_study_id'].map(race_map).fillna(default_race)
+
+# Insert `race` column immediately after `ehi_handedness` (or after `peg_handedness` if not present)
+cols = list(combined.columns)
+if 'race' in cols:
+    cols.remove('race')
+insert_pos = None
+if 'ehi_handedness' in cols:
+    insert_pos = cols.index('ehi_handedness') + 1
+elif 'handedness' in cols:
+    insert_pos = cols.index('handedness') + 1
+elif 'peg_handedness' in cols:
+    insert_pos = cols.index('peg_handedness') + 1
+else:
+    insert_pos = len(cols)
+# reorder columns to place race at desired position
+cols.insert(insert_pos, 'race')
+combined = combined.loc[:, cols]
+
+# --- Compute `ethnicity` column from demo_ethnicity___1..3 (based on screening visit) ---
+eth_cols = [f'demo_ethnicity___{i}' for i in range(1, 4)]
+def _eth_from_row(row):
+    vals = []
+    for c in eth_cols:
+        if c in row.index:
+            try:
+                v = row[c]
+            except Exception:
+                v = None
+        else:
+            v = None
+        if pd.isna(v):
+            vals.append(0)
+        else:
+            try:
+                vals.append(int(v))
+            except Exception:
+                vals.append(0)
+
+    positives = sum(1 for v in vals if v > 0)
+    # if multiple selections, treat as Unknown
+    if positives > 1:
+        return 'Unknown'
+    mapping = {
+        1: 'Not Hispanic or Latino',
+        2: 'Hispanic or Latino',
+        3: 'Unknown'
+    }
+    for idx, v in enumerate(vals, start=1):
+        if v > 0:
+            return mapping.get(idx, 'Unknown')
+    return 'Unknown'
+
+# build mapping of demo_study_id -> ethnicity using screening visit
+eth_map = {}
+if 'demo_study_id' in combined.columns:
+    screening = combined.loc[combined['redcap_event_name'] == 'screening_visit_arm_1'] if 'redcap_event_name' in combined.columns else combined.iloc[0:0]
+    for sid, group in screening.groupby('demo_study_id'):
+        assigned = None
+        for _, r in group.iterrows():
+            assigned = _eth_from_row(r)
+            if assigned is not None:
+                break
+        eth_map[sid] = assigned if (assigned is not None) else 'Unknown'
+
+default_eth = 'Unknown'
+combined['ethnicity'] = combined['demo_study_id'].map(eth_map).fillna(default_eth)
+
+# insert `ethnicity` immediately after `race` if possible
+cols = list(combined.columns)
+if 'ethnicity' in cols:
+    cols.remove('ethnicity')
+if 'race' in cols:
+    pos = cols.index('race') + 1
+else:
+    pos = len(cols)
+cols.insert(pos, 'ethnicity')
+combined = combined.loc[:, cols]
+
 
 # ### Days since onset
 def calculate_days_onset(x):
