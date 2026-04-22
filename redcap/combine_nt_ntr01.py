@@ -988,5 +988,550 @@ for i in combined.index.values:
         combined.loc[i, 'dsm-5_expert_diagnosis_onset_confid'] = "01/01/2014 - 01/31/2014"
 
 #### save to CSV file
-combined.to_csv('C:/Users/'+user+'/Box/Black_Lab/projects/TS/New_Tics_R01/Data/analysis/DS/r01_combine/r01_all_data_'+current_date+'.csv')
+# Drop rows with no nt_group before saving
+if 'nt_group' in combined.columns:
+    before_count = len(combined)
+    mask = combined['nt_group'].notna() & combined['nt_group'].astype(str).str.strip().ne('')
+    combined = combined.loc[mask].reset_index(drop=True)
+    after_count = len(combined)
+    print(f"Dropped {before_count - after_count} rows with missing nt_group; {after_count} rows remain.")
 
+combined.to_csv(home / 'Box' / 'Black_Lab' / 'projects' / 'TS' / 'New_Tics_R01' / 'Data' / 'analysis' / 'DS' / 'r01_combine' / f'r01_all_data_{current_date}.csv')
+
+# Read csv file with columns for NT_r01_combine_for_ENIGMA
+enigma_columns = pd.read_excel(home / 'Box' / 'Black_Lab' / 'projects' / 'TS' / 'New_Tics_R01' / 'Data' / 'analysis' / 'DS' / 'r01_combine' / 'NT_r01_combine_for_ENIGMA_columns.xlsx')
+# filter for only the visit types required by ENIGMA
+allowed_events = {
+    'screening_visit_arm_1', 'scan_day_1_arm_1', 'repeat_scan_visit_arm_1',
+    'initial_scan_visit_arm_1', 'initial_screen_ext_arm_1', 'initial_screen_extra_arm_1',
+    '12_month_follow_up_arm_1', '12_month_scan_visi_arm_1'
+}
+if 'redcap_event_name' in combined.columns:
+    combined_for_enigma = combined.loc[combined['redcap_event_name'].isin(allowed_events)].copy()
+else:
+    combined_for_enigma = combined.copy()
+
+# Sort ENIGMA input by subject and visit date for consistent ordering
+sort_cols = []
+if 'demo_study_id' in combined_for_enigma.columns:
+    sort_cols.append('demo_study_id')
+if 'visit_date' in combined_for_enigma.columns:
+    # convert visit_date to datetime for proper sorting; coerce errors to NaT
+    combined_for_enigma['_enigma_visit_date_dt'] = pd.to_datetime(combined_for_enigma.get('visit_date'), errors='coerce')
+    sort_cols.append('_enigma_visit_date_dt')
+if sort_cols:
+    combined_for_enigma = combined_for_enigma.sort_values(by=sort_cols).reset_index(drop=True)
+    # drop the temporary datetime column if created
+    if '_enigma_visit_date_dt' in combined_for_enigma.columns:
+        combined_for_enigma.drop(columns=['_enigma_visit_date_dt'], inplace=True)
+
+# Add `dci_date` for ENIGMA: set to `visit_date` only where `ts_dci_score_1` is numeric
+if 'dci_date' not in combined_for_enigma.columns:
+    if 'ts_dci_score_1' in combined_for_enigma.columns and 'visit_date' in combined_for_enigma.columns:
+        is_num = pd.to_numeric(combined_for_enigma['ts_dci_score_1'], errors='coerce').notna()
+        combined_for_enigma['dci_date'] = np.where(is_num, combined_for_enigma['visit_date'], pd.NaT)
+    else:
+        combined_for_enigma['dci_date'] = pd.NaT
+
+# Ensure ksads5 fields are present in ENIGMA input (keep for lifetime logic)
+for _col in ('ksads5_adhd_yn', 'ksads5_ocd_ce', 'ksads5_ocd_msp'):
+    if _col not in combined_for_enigma.columns:
+        combined_for_enigma[_col] = pd.NA
+
+# Reorder ksads5 fields to appear immediately after their expert_diagnosis counterparts
+_cols = list(combined_for_enigma.columns)
+def _insert_after(base_col, insert_cols, cols_list):
+    if base_col not in cols_list:
+        return cols_list
+    # remove insert_cols if already present
+    cols_list = [c for c in cols_list if c not in insert_cols]
+    base_idx = cols_list.index(base_col)
+    for i, ic in enumerate(insert_cols, start=1):
+        cols_list.insert(base_idx + i, ic)
+    return cols_list
+
+_cols = _insert_after('expert_diagnosis_adhd', ['ksads5_adhd_yn'], _cols)
+_cols = _insert_after('expert_diagnosis_ocd', ['ksads5_ocd_ce', 'ksads5_ocd_msp'], _cols)
+combined_for_enigma = combined_for_enigma.loc[:, _cols]
+
+# Compute ADHD current flag on the ENIGMA input (used to derive lifetime at first visit)
+if 'expert_diagnosis_adhd' in combined_for_enigma.columns:
+    combined_for_enigma['ADHD_diagnosis_current'] = pd.NA
+    _mask_adhd_present = pd.to_numeric(combined_for_enigma['expert_diagnosis_adhd'], errors='coerce').isin([1, 2, 3])
+    if _mask_adhd_present.any():
+        combined_for_enigma.loc[_mask_adhd_present, 'ADHD_diagnosis_current'] = (
+            combined_for_enigma.loc[_mask_adhd_present, 'expert_diagnosis_adhd']
+            .apply(lambda x: 'Y' if int(x) == 1 else 'N')
+        )
+
+# Vectorized ADHD lifetime: compute row-level assigned flags, then carry-forward 'Y' per subject
+combined_for_enigma['ADHD_diagnosis_lifetime'] = pd.NA
+if 'demo_study_id' in combined_for_enigma.columns:
+    _expert_num = pd.to_numeric(combined_for_enigma.get('expert_diagnosis_adhd'), errors='coerce')
+    _ksads_num = pd.to_numeric(combined_for_enigma.get('ksads5_adhd_yn'), errors='coerce')
+    _expert_present = _expert_num.isin([1, 2, 3])
+    _expert_y = _expert_num == 1
+    _expert_n = _expert_present & (_expert_num != 1)
+    _ksads_y = _ksads_num == 1
+    _ksads_n = _ksads_num == 0
+    assigned_y = (_expert_y) | (_ksads_y)
+    assigned_n = (_expert_n) | (_ksads_n)
+    # carry-forward any Y within each subject (subjects already sorted by visit_date)
+    lifetime_y = assigned_y.groupby(combined_for_enigma['demo_study_id']).cummax()
+    combined_for_enigma['ADHD_diagnosis_lifetime'] = np.where(lifetime_y, 'Y', np.where(assigned_n, 'N', pd.NA))
+    # Set lifetime source to clinician when lifetime is determined (Y or N)
+    combined_for_enigma['ADHD_dx_lifetime_source'] = pd.NA
+    combined_for_enigma.loc[combined_for_enigma['ADHD_diagnosis_lifetime'].isin(['Y', 'N']), 'ADHD_dx_lifetime_source'] = 'clinician'
+
+# For YGTSS variables: for screening-like events, keep YGTSS only for the latest
+# screening visit per subject. Clear YGTSS values on other screening rows so ENIGMA
+# receives only the most recent screening YGTSS measurements.
+if 'demo_study_id' in combined_for_enigma.columns and 'redcap_event_name' in combined_for_enigma.columns:
+    # identify ygtss columns (case-insensitive)
+    ygtss_cols = [c for c in combined_for_enigma.columns if 'ygtss' in c.lower()]
+    if ygtss_cols:
+        # mark screening-like rows using explicit list of event names
+        screen_events = {
+            'screening_visit_arm_1', 'scan_day_1_arm_1', 'repeat_scan_visit_arm_1',
+            'initial_scan_visit_arm_1', 'initial_screen_ext_arm_1'
+        }
+        screen_mask = combined_for_enigma['redcap_event_name'].astype(str).str.lower().isin(screen_events)
+        # create a datetime column for ordering (visit_date may be missing or non-datetime)
+        combined_for_enigma['_enigma_visit_date_dt'] = pd.to_datetime(combined_for_enigma.get('visit_date'), errors='coerce')
+        # process per subject: find latest screening row by max visit_date and copy its YGTSS into the canonical screen row
+        screening_rows = combined_for_enigma.loc[screen_mask]
+        if not screening_rows.empty:
+            latest_by_subject = {}
+
+# Compute OCD current flag on the ENIGMA input (used to derive lifetime)
+if 'expert_diagnosis_ocd' in combined_for_enigma.columns:
+    combined_for_enigma['OCD_diagnosis_current'] = pd.NA
+    _mask_ocd_present = pd.to_numeric(combined_for_enigma['expert_diagnosis_ocd'], errors='coerce').isin([1, 2, 3])
+    if _mask_ocd_present.any():
+        combined_for_enigma.loc[_mask_ocd_present, 'OCD_diagnosis_current'] = (
+            combined_for_enigma.loc[_mask_ocd_present, 'expert_diagnosis_ocd']
+            .apply(lambda x: 'Y' if int(x) == 1 else 'N')
+        )
+
+# Vectorized OCD lifetime: compute row-level assigned flags then carry-forward 'Y' per subject
+combined_for_enigma['OCD_diagnosis_lifetime'] = pd.NA
+if 'demo_study_id' in combined_for_enigma.columns:
+    _expert_ocd = pd.to_numeric(combined_for_enigma.get('expert_diagnosis_ocd'), errors='coerce')
+    _ksads_ce = pd.to_numeric(combined_for_enigma.get('ksads5_ocd_ce'), errors='coerce')
+    _ksads_msp = pd.to_numeric(combined_for_enigma.get('ksads5_ocd_msp'), errors='coerce')
+    _expert_present_ocd = _expert_ocd.isin([1, 2, 3])
+    _expert_y_ocd = _expert_ocd == 1
+    _expert_n_ocd = _expert_present_ocd & (_expert_ocd != 1)
+    _ksads_y_ocd = (_ksads_ce.isin([3, 4])) | (_ksads_msp == 3)
+    _ksads_n_ocd = (_ksads_ce == 0) | (_ksads_msp == 0)
+    assigned_y_ocd = _expert_y_ocd | _ksads_y_ocd
+    assigned_n_ocd = _expert_n_ocd | _ksads_n_ocd
+    lifetime_y_ocd = assigned_y_ocd.groupby(combined_for_enigma['demo_study_id']).cummax()
+    combined_for_enigma['OCD_diagnosis_lifetime'] = np.where(lifetime_y_ocd, 'Y', np.where(assigned_n_ocd, 'N', pd.NA))
+    # Set lifetime source to clinician when lifetime is determined (Y or N)
+    combined_for_enigma['OCD_dx_lifetime_source'] = pd.NA
+    combined_for_enigma.loc[combined_for_enigma['OCD_diagnosis_lifetime'].isin(['Y', 'N']), 'OCD_dx_lifetime_source'] = 'clinician'
+
+    target_indices = set()
+    for sid, source_idx in latest_by_subject.items():
+        # determine target row: prefer the canonical 'screening_visit_arm_1' row for this subject
+        subj_mask = (combined_for_enigma['demo_study_id'] == sid)
+        canonical_rows = combined_for_enigma.index[subj_mask & (combined_for_enigma['redcap_event_name'].astype(str).str.lower() == 'screening_visit_arm_1')].tolist()
+        if canonical_rows:
+            target_idx = canonical_rows[0]
+        else:
+            target_idx = source_idx
+
+        # copy YGTSS columns and set ygtss_date on the target row
+        for col in ygtss_cols:
+            combined_for_enigma.loc[target_idx, col] = combined_for_enigma.loc[source_idx, col]
+        combined_for_enigma.loc[target_idx, 'ygtss_date'] = combined_for_enigma.loc[source_idx, 'visit_date'] if 'visit_date' in combined_for_enigma.columns else pd.NaT
+        target_indices.add(target_idx)
+
+    # clear YGTSS on all screening-like rows that are NOT the target rows
+    mask_to_clear = screen_mask & ~combined_for_enigma.index.isin(list(target_indices))
+    combined_for_enigma.loc[mask_to_clear, ygtss_cols] = np.nan
+
+    # PUTS: pick latest screening row that actually contains PUTS data (by date) and copy PUTS values
+    # ensure puts_date column exists before use to avoid KeyError when reordering
+    if 'puts_date' not in combined_for_enigma.columns:
+        # ensure puts_date exists (start as missing; will be set from PUTS rows or from puts_total later)
+        combined_for_enigma['puts_date'] = pd.NaT
+    puts_cols = [c for c in combined_for_enigma.columns if c.lower().startswith('puts_')]
+    if puts_cols:
+        # find screening rows that have any PUTS data
+        # screening_rows was created earlier and may not contain columns added to
+        # combined_for_enigma afterward, so only use puts_cols that exist in screening_rows
+        existing_puts_cols = [c for c in puts_cols if c in screening_rows.columns]
+        if existing_puts_cols:
+            screening_puts = screening_rows[screening_rows[existing_puts_cols].notna().any(axis=1)]
+        else:
+            screening_puts = screening_rows.iloc[0:0]
+        latest_puts_by_subject = {}
+        for sid, grp in screening_puts.groupby('demo_study_id', sort=False):
+            if grp['_enigma_visit_date_dt'].notna().any():
+                max_dt = grp['_enigma_visit_date_dt'].max()
+                candidates = grp[grp['_enigma_visit_date_dt'] == max_dt]
+                source_puts_idx = candidates.index[-1]
+            else:
+                source_puts_idx = grp.index[-1]
+            latest_puts_by_subject[sid] = source_puts_idx
+
+        for sid, source_idx in latest_by_subject.items():
+            # determine which source to use for PUTS: prefer latest_puts_by_subject if available
+            source_puts_idx = latest_puts_by_subject.get(sid, source_idx)
+            subj_mask = (combined_for_enigma['demo_study_id'] == sid)
+            canonical_rows = combined_for_enigma.index[subj_mask & (combined_for_enigma['redcap_event_name'].astype(str).str.lower() == 'screening_visit_arm_1')].tolist()
+            if canonical_rows:
+                target_idx = canonical_rows[0]
+            else:
+                target_idx = source_puts_idx
+            for col in puts_cols:
+                combined_for_enigma.loc[target_idx, col] = combined_for_enigma.loc[source_puts_idx, col]
+            combined_for_enigma.loc[target_idx, 'puts_date'] = combined_for_enigma.loc[source_puts_idx, 'visit_date'] if 'visit_date' in combined_for_enigma.columns else pd.NaT
+        # clear PUTS on non-target screening rows
+        combined_for_enigma.loc[mask_to_clear, puts_cols] = np.nan
+
+    # CYBOCS: copy latest screening row that has CYBOCS data (fields starting with 'cybocs_past_week_expert')
+    cybocs_cols = [c for c in combined_for_enigma.columns if c.lower().startswith('cybocs_past_week_expert')]
+    if cybocs_cols:
+        # screening rows with any CYBOCS data
+        screening_cybocs = screening_rows[screening_rows[cybocs_cols].notna().any(axis=1)]
+        latest_cybocs_by_subject = {}
+        for sid, grp in screening_cybocs.groupby('demo_study_id', sort=False):
+            if grp['_enigma_visit_date_dt'].notna().any():
+                max_dt = grp['_enigma_visit_date_dt'].max()
+                candidates = grp[grp['_enigma_visit_date_dt'] == max_dt]
+                source_cybocs_idx = candidates.index[-1]
+            else:
+                source_cybocs_idx = grp.index[-1]
+            latest_cybocs_by_subject[sid] = source_cybocs_idx
+
+        for sid, source_idx in latest_by_subject.items():
+            # prefer latest with CYBOCS data if present, otherwise fallback to latest screening row
+            source_cybocs_idx = latest_cybocs_by_subject.get(sid, source_idx)
+            subj_mask = (combined_for_enigma['demo_study_id'] == sid)
+            canonical_rows = combined_for_enigma.index[subj_mask & (combined_for_enigma['redcap_event_name'].astype(str).str.lower() == 'screening_visit_arm_1')].tolist()
+            if canonical_rows:
+                target_idx = canonical_rows[0]
+            else:
+                target_idx = source_cybocs_idx
+            for col in cybocs_cols:
+                combined_for_enigma.loc[target_idx, col] = combined_for_enigma.loc[source_cybocs_idx, col]
+            # set cybocs_date on the target row from the source visit_date
+            combined_for_enigma.loc[target_idx, 'cybocs_date'] = combined_for_enigma.loc[source_cybocs_idx, 'visit_date'] if 'visit_date' in combined_for_enigma.columns else pd.NaT
+        # clear CYBOCS on non-target screening rows
+        combined_for_enigma.loc[mask_to_clear, cybocs_cols] = np.nan
+
+    # --- 12-month events: if the scan visit is later than the follow-up, move data into the canonical 12_month_follow_up_arm_1 row
+    twelve_month_events = {'12_month_follow_up_arm_1', '12_month_scan_visi_arm_1'}
+    mask_12mo = combined_for_enigma['redcap_event_name'].astype(str).str.lower().isin(twelve_month_events)
+    twelve_rows = combined_for_enigma.loc[mask_12mo]
+    if not twelve_rows.empty:
+        puts_cols_12 = [c for c in combined_for_enigma.columns if c.lower().startswith('puts_')]
+        cybocs_cols_12 = [c for c in combined_for_enigma.columns if c.lower().startswith('cybocs_past_week_expert')]
+        adhd_source_field = 'adhd_current_expert_total'
+        adhd_comment_field = 'adhd_current_expert_comments'
+        adhd_cols_12 = [c for c in [adhd_source_field, adhd_comment_field] if c in combined_for_enigma.columns]
+        for sid, grp in twelve_rows.groupby('demo_study_id', sort=False):
+            # find canonical follow-up index
+            follow_idx_list = grp[grp['redcap_event_name'].astype(str).str.lower() == '12_month_follow_up_arm_1'].index.tolist()
+            if not follow_idx_list:
+                continue
+            follow_idx = follow_idx_list[0]
+            # parse visit_date for this group's rows to robustly compare
+            parsed_dates = pd.to_datetime(grp['visit_date'], errors='coerce')
+            # choose a source row as the one with the max parsed date (fallback to last row)
+            if parsed_dates.notna().any():
+                max_dt = parsed_dates.max()
+                candidates = grp[parsed_dates == max_dt]
+                source_idx = candidates.index[-1]
+            else:
+                source_idx = grp.index[-1]
+
+            follow_dt = pd.to_datetime(combined_for_enigma.loc[follow_idx, 'visit_date'], errors='coerce') if 'visit_date' in combined_for_enigma.columns else pd.NaT
+            source_dt = pd.to_datetime(combined_for_enigma.loc[source_idx, 'visit_date'], errors='coerce') if 'visit_date' in combined_for_enigma.columns else pd.NaT
+
+            # helper to check presence of data
+            def _has_cols(idx, cols):
+                return any(col in combined_for_enigma.columns and pd.notna(combined_for_enigma.loc[idx, col]) for col in cols)
+
+            # For each measure, decide whether to copy from source->follow based on dates and presence
+            # YGTSS
+            has_source_ygtss = _has_cols(source_idx, ygtss_cols)
+            has_follow_ygtss = _has_cols(follow_idx, ygtss_cols)
+            should_copy_ygtss = False
+            if not pd.isna(source_dt) and (pd.isna(follow_dt) or source_dt > follow_dt):
+                should_copy_ygtss = has_source_ygtss
+            elif not pd.isna(source_dt) and not pd.isna(follow_dt) and source_dt == follow_dt:
+                should_copy_ygtss = has_source_ygtss and not has_follow_ygtss
+            elif pd.isna(source_dt) and pd.isna(follow_dt):
+                should_copy_ygtss = has_source_ygtss and not has_follow_ygtss
+
+            if should_copy_ygtss:
+                for col in ygtss_cols:
+                    if col in combined_for_enigma.columns:
+                        combined_for_enigma.loc[follow_idx, col] = combined_for_enigma.loc[source_idx, col]
+                combined_for_enigma.loc[follow_idx, 'ygtss_date'] = combined_for_enigma.loc[source_idx, 'visit_date'] if 'visit_date' in combined_for_enigma.columns else pd.NaT
+
+            # PUTS
+            has_source_puts = _has_cols(source_idx, puts_cols_12)
+            has_follow_puts = _has_cols(follow_idx, puts_cols_12)
+            should_copy_puts = False
+            if not pd.isna(source_dt) and (pd.isna(follow_dt) or source_dt > follow_dt):
+                should_copy_puts = has_source_puts
+            elif not pd.isna(source_dt) and not pd.isna(follow_dt) and source_dt == follow_dt:
+                should_copy_puts = has_source_puts and not has_follow_puts
+            elif pd.isna(source_dt) and pd.isna(follow_dt):
+                should_copy_puts = has_source_puts and not has_follow_puts
+            if should_copy_puts:
+                for col in puts_cols_12:
+                    combined_for_enigma.loc[follow_idx, col] = combined_for_enigma.loc[source_idx, col]
+                combined_for_enigma.loc[follow_idx, 'puts_date'] = combined_for_enigma.loc[source_idx, 'visit_date'] if 'visit_date' in combined_for_enigma.columns else pd.NaT
+
+            # CYBOCS
+            has_source_cybocs = _has_cols(source_idx, cybocs_cols_12)
+            has_follow_cybocs = _has_cols(follow_idx, cybocs_cols_12)
+            should_copy_cybocs = False
+            if not pd.isna(source_dt) and (pd.isna(follow_dt) or source_dt > follow_dt):
+                should_copy_cybocs = has_source_cybocs
+            elif not pd.isna(source_dt) and not pd.isna(follow_dt) and source_dt == follow_dt:
+                should_copy_cybocs = has_source_cybocs and not has_follow_cybocs
+            elif pd.isna(source_dt) and pd.isna(follow_dt):
+                should_copy_cybocs = has_source_cybocs and not has_follow_cybocs
+            if should_copy_cybocs:
+                for col in cybocs_cols_12:
+                    combined_for_enigma.loc[follow_idx, col] = combined_for_enigma.loc[source_idx, col]
+                combined_for_enigma.loc[follow_idx, 'cybocs_date'] = combined_for_enigma.loc[source_idx, 'visit_date'] if 'visit_date' in combined_for_enigma.columns else pd.NaT
+
+            # ADHD
+            has_source_adhd = _has_cols(source_idx, adhd_cols_12)
+            has_follow_adhd = _has_cols(follow_idx, adhd_cols_12)
+            should_copy_adhd = False
+            if not pd.isna(source_dt) and (pd.isna(follow_dt) or source_dt > follow_dt):
+                should_copy_adhd = has_source_adhd
+            elif not pd.isna(source_dt) and not pd.isna(follow_dt) and source_dt == follow_dt:
+                should_copy_adhd = has_source_adhd and not has_follow_adhd
+            elif pd.isna(source_dt) and pd.isna(follow_dt):
+                should_copy_adhd = has_source_adhd and not has_follow_adhd
+            if should_copy_adhd:
+                for col in adhd_cols_12:
+                    combined_for_enigma.loc[follow_idx, col] = combined_for_enigma.loc[source_idx, col]
+
+            # clear these fields on other 12-month rows for this subject if we copied any
+            if any([should_copy_ygtss, should_copy_puts, should_copy_cybocs, should_copy_adhd]):
+                clear_mask = mask_12mo & (combined_for_enigma['demo_study_id'] == sid) & (combined_for_enigma.index != follow_idx)
+                cols_to_clear = list(set(ygtss_cols + puts_cols_12 + cybocs_cols_12 + adhd_cols_12))
+                combined_for_enigma.loc[clear_mask, cols_to_clear] = np.nan
+            # Ensure date fields exist for follow-up if values are present but dates missing
+            # (e.g., if data already on follow-up row but we never set *_date)
+            visit_dt = combined_for_enigma.loc[follow_idx, 'visit_date'] if 'visit_date' in combined_for_enigma.columns else pd.NaT
+            if 'ygtss_date' in combined_for_enigma.columns:
+                # if ygtss exists but ygtss_date missing/empty, set to visit_date
+                has_ygtss = combined_for_enigma.loc[follow_idx, ygtss_cols].notna().any() if ygtss_cols else False
+                cur = combined_for_enigma.loc[follow_idx, 'ygtss_date']
+                if has_ygtss and (pd.isna(cur) or str(cur).strip() == ''):
+                    combined_for_enigma.loc[follow_idx, 'ygtss_date'] = visit_dt
+            if 'puts_date' in combined_for_enigma.columns:
+                has_puts = any(col in combined_for_enigma.columns and pd.notna(combined_for_enigma.loc[follow_idx, col]) for col in puts_cols_12)
+                curp = combined_for_enigma.loc[follow_idx, 'puts_date']
+                if has_puts and (pd.isna(curp) or str(curp).strip() == ''):
+                    combined_for_enigma.loc[follow_idx, 'puts_date'] = visit_dt
+            if 'cybocs_date' in combined_for_enigma.columns:
+                has_cybocs = any(col in combined_for_enigma.columns and pd.notna(combined_for_enigma.loc[follow_idx, col]) for col in cybocs_cols_12)
+                curc = combined_for_enigma.loc[follow_idx, 'cybocs_date']
+                if has_cybocs and (pd.isna(curc) or str(curc).strip() == ''):
+                    combined_for_enigma.loc[follow_idx, 'cybocs_date'] = visit_dt
+
+    # ADHD: copy latest screening row that has adhd_current_expert_total data
+    # add `adhd_sev_date` set to visit_date for ENIGMA processing (will be moved to latest row)
+    if 'adhd_sev_date' not in combined_for_enigma.columns:
+        if 'visit_date' in combined_for_enigma.columns:
+            combined_for_enigma['adhd_sev_date'] = combined_for_enigma['visit_date']
+        else:
+            combined_for_enigma['adhd_sev_date'] = pd.NaT
+
+    adhd_source_field = 'adhd_current_expert_total'
+    adhd_comment_field = 'adhd_current_expert_comments'
+    # include adhd_sev_date so it moves with the other ADHD fields
+    adhd_cols = [c for c in [adhd_source_field, adhd_comment_field, 'adhd_sev_date'] if c in combined_for_enigma.columns]
+    if adhd_cols:
+        screening_adhd = screening_rows[screening_rows[adhd_source_field].notna()]
+        latest_adhd_by_subject = {}
+        for sid, grp in screening_adhd.groupby('demo_study_id', sort=False):
+            if grp['_enigma_visit_date_dt'].notna().any():
+                max_dt = grp['_enigma_visit_date_dt'].max()
+                candidates = grp[grp['_enigma_visit_date_dt'] == max_dt]
+                source_adhd_idx = candidates.index[-1]
+            else:
+                source_adhd_idx = grp.index[-1]
+            latest_adhd_by_subject[sid] = source_adhd_idx
+
+        for sid, source_idx in latest_by_subject.items():
+            source_adhd_idx = latest_adhd_by_subject.get(sid, source_idx)
+            subj_mask = (combined_for_enigma['demo_study_id'] == sid)
+            canonical_rows = combined_for_enigma.index[subj_mask & (combined_for_enigma['redcap_event_name'].astype(str).str.lower() == 'screening_visit_arm_1')].tolist()
+            if canonical_rows:
+                target_idx = canonical_rows[0]
+            else:
+                target_idx = source_adhd_idx
+            for col in adhd_cols:
+                combined_for_enigma.loc[target_idx, col] = combined_for_enigma.loc[source_adhd_idx, col]
+        # clear ADHD on non-target screening rows
+        combined_for_enigma.loc[mask_to_clear, adhd_cols] = np.nan
+
+        # drop temporary datetime helper
+        combined_for_enigma.drop(columns=['_enigma_visit_date_dt'], inplace=True, errors='ignore')
+
+# create `visit` column based on `redcap_event_name`
+if 'redcap_event_name' in combined_for_enigma.columns:
+    rn = combined_for_enigma['redcap_event_name'].astype(str).str.lower()
+    is_screen = rn.str.contains('screen', na=False)
+    is_12mo = rn.str.startswith('12_month', na=False)
+    combined_for_enigma['visit'] = np.where(is_screen, 'ses-screen', np.where(is_12mo, 'ses-12mo', ''))
+else:
+    combined_for_enigma['visit'] = ''
+
+# ensure `visit` is included immediately after `redcap_event_name` in the ENIGMA column ordering
+enigma_cols = enigma_columns['r01_combine_name'].tolist()
+if 'visit' not in enigma_cols:
+    if 'redcap_event_name' in enigma_cols:
+        idx = enigma_cols.index('redcap_event_name')
+        enigma_cols.insert(idx+1, 'visit')
+    else:
+        # fallback: put visit at the front
+        enigma_cols.insert(0, 'visit')
+
+# Ensure dci_date appears immediately after ts_dci_score in enigma column ordering
+if 'ts_dci_score' in enigma_cols and 'dci_date' not in enigma_cols:
+    enigma_cols.insert(enigma_cols.index('ts_dci_score') + 1, 'dci_date')
+elif 'dci_date' not in enigma_cols:
+    enigma_cols.append('dci_date')
+
+# add `kbit_date` to combined_for_enigma (only for screening visits)
+if 'redcap_event_name' in combined_for_enigma.columns and 'visit_date' in combined_for_enigma.columns:
+    combined_for_enigma['kbit_date'] = np.where(
+        combined_for_enigma['redcap_event_name'] == 'screening_visit_arm_1',
+        combined_for_enigma['visit_date'],
+        pd.NaT
+    )
+else:
+    combined_for_enigma['kbit_date'] = pd.NaT
+
+# Ensure kbit_date appears immediately before kbit_verbal_knowledge_raw in enigma column ordering
+if 'kbit_verbal_knowledge_raw' in enigma_cols and 'kbit_date' not in enigma_cols:
+    idx = enigma_cols.index('kbit_verbal_knowledge_raw')
+    enigma_cols.insert(idx, 'kbit_date')
+
+# add `puts_date` set to visit_date only where puts_total > 0
+if 'visit_date' in combined_for_enigma.columns and 'puts_total' in combined_for_enigma.columns:
+    temp_puts_date = np.where(combined_for_enigma['puts_total'] > 0, combined_for_enigma['visit_date'], pd.NaT)
+    # only set where puts_date is missing so earlier logic (copying latest PUTS) isn't overwritten
+    if 'puts_date' in combined_for_enigma.columns:
+        combined_for_enigma['puts_date'] = combined_for_enigma['puts_date'].fillna(pd.Series(temp_puts_date, index=combined_for_enigma.index))
+    else:
+        combined_for_enigma['puts_date'] = temp_puts_date
+else:
+    if 'puts_date' not in combined_for_enigma.columns:
+        combined_for_enigma['puts_date'] = pd.NaT
+
+# Ensure puts_date appears immediately before puts_1 in enigma column ordering
+if 'puts_1' in enigma_cols and 'puts_date' not in enigma_cols:
+    idx_puts = enigma_cols.index('puts_1')
+    enigma_cols.insert(idx_puts, 'puts_date')
+
+# Ensure adhd_sev_date appears immediately after adhd_current_expert_comments in enigma column ordering
+if 'adhd_sev_date' not in combined_for_enigma.columns:
+    if 'visit_date' in combined_for_enigma.columns:
+        combined_for_enigma['adhd_sev_date'] = combined_for_enigma['visit_date']
+    else:
+        combined_for_enigma['adhd_sev_date'] = pd.NaT
+
+if 'adhd_current_expert_comments' in enigma_cols and 'adhd_sev_date' not in enigma_cols:
+    enigma_cols.insert(enigma_cols.index('adhd_current_expert_comments') + 1, 'adhd_sev_date')
+elif 'adhd_sev_date' not in enigma_cols:
+    enigma_cols.append('adhd_sev_date')
+
+# Create `ancestry` by combining `race` and `ethnicity` for ENIGMA output
+if 'race' in combined_for_enigma.columns or 'ethnicity' in combined_for_enigma.columns:
+    def _combine_ancestry(row):
+        r = row.get('race') if 'race' in row.index else None
+        e = row.get('ethnicity') if 'ethnicity' in row.index else None
+        if pd.isna(r) and pd.isna(e):
+            return 'Unknown'
+        parts = []
+        if pd.notna(r) and str(r).strip() != '':
+            parts.append(str(r))
+        if pd.notna(e) and str(e).strip() != '':
+            parts.append(str(e))
+        return ', '.join(parts) if parts else 'Unknown'
+
+    combined_for_enigma['ancestry'] = combined_for_enigma.apply(_combine_ancestry, axis=1)
+    # ensure `ancestry` is in the enigma column ordering, right after `ethnicity` if possible
+    if 'ancestry' not in enigma_cols:
+        if 'ethnicity' in enigma_cols:
+            enigma_cols.insert(enigma_cols.index('ethnicity') + 1, 'ancestry')
+        else:
+            enigma_cols.append('ancestry')
+
+# Keep `race` and `ethnicity` in ENIGMA output (we also include `ancestry`)
+# ensure `cybocs_date` column exists and is ordered after cybocs columns in ENIGMA output
+if 'cybocs_date' not in combined_for_enigma.columns:
+    combined_for_enigma['cybocs_date'] = pd.NaT
+cybocs_enigma = [c for c in enigma_cols if c.startswith('cybocs_past_week_expert')]
+if cybocs_enigma and 'cybocs_date' not in enigma_cols:
+    last_c = cybocs_enigma[-1]
+    enigma_cols.insert(enigma_cols.index(last_c) + 1, 'cybocs_date')
+
+combined_enigma = combined_for_enigma.loc[:, [c for c in enigma_cols if c in combined_for_enigma.columns]]
+
+# If tic_diagnosis_current is blank in the ENIGMA table, clear tic_dx_current_date as well
+if 'tic_diagnosis_current' in combined_enigma.columns and 'tic_dx_current_date' in combined_enigma.columns:
+    blank_dx_mask = combined_enigma['tic_diagnosis_current'].isna() | (combined_enigma['tic_diagnosis_current'].astype(str).str.strip() == '')
+    combined_enigma.loc[blank_dx_mask, 'tic_dx_current_date'] = pd.NaT
+
+# ADHD diagnosis fields: set current diagnosis flag and source
+if 'expert_diagnosis_adhd' in combined_enigma.columns:
+    # Initialize ADHD fields as empty; populate only where expert_diagnosis_adhd is present
+    combined_enigma['ADHD_diagnosis_current'] = pd.NA
+    combined_enigma['ADHD_dx_current_source'] = pd.NA
+    combined_enigma['ADHD_dx_current_date'] = pd.NaT
+    _mask_adhd = pd.to_numeric(combined_enigma['expert_diagnosis_adhd'], errors='coerce').isin([1, 2, 3])
+    combined_enigma.loc[_mask_adhd, 'ADHD_diagnosis_current'] = combined_enigma.loc[_mask_adhd, 'expert_diagnosis_adhd'].apply(lambda x: 'Y' if x == 1 else 'N')
+    combined_enigma.loc[_mask_adhd, 'ADHD_dx_current_source'] = 'clinician'
+    if 'visit_date' in combined_enigma.columns:
+        combined_enigma.loc[_mask_adhd, 'ADHD_dx_current_date'] = combined_enigma.loc[_mask_adhd, 'visit_date']
+    else:
+        combined_enigma.loc[_mask_adhd, 'ADHD_dx_current_date'] = pd.NaT
+
+# OCD diagnosis fields: set current diagnosis flag and source
+if 'expert_diagnosis_ocd' in combined_enigma.columns:
+    # Initialize OCD fields as empty; populate only where expert_diagnosis_ocd is present
+    combined_enigma['OCD_diagnosis_current'] = pd.NA
+    combined_enigma['OCD_dx_current_source'] = pd.NA
+    combined_enigma['OCD_dx_current_date'] = pd.NaT
+    _mask_ocd = pd.to_numeric(combined_enigma['expert_diagnosis_ocd'], errors='coerce').isin([1, 2, 3])
+    combined_enigma.loc[_mask_ocd, 'OCD_diagnosis_current'] = combined_enigma.loc[_mask_ocd, 'expert_diagnosis_ocd'].apply(lambda x: 'Y' if x == 1 else 'N')
+    combined_enigma.loc[_mask_ocd, 'OCD_dx_current_source'] = 'clinician'
+    if 'visit_date' in combined_enigma.columns:
+        combined_enigma.loc[_mask_ocd, 'OCD_dx_current_date'] = combined_enigma.loc[_mask_ocd, 'visit_date']
+    else:
+        combined_enigma.loc[_mask_ocd, 'OCD_dx_current_date'] = pd.NaT
+
+# Report how many ENIGMA columns are missing from combined
+enigma_required = enigma_columns['r01_combine_name'].tolist()
+missing_from_combined = [c for c in enigma_required if c not in combined_enigma.columns]
+print(f"\nENIGMA columns required: {len(enigma_required)}; missing from combined: {len(missing_from_combined)}")
+if missing_from_combined:
+    print('Missing ENIGMA columns:')
+    for c in missing_from_combined:
+        print('-', c)
+
+
+# Keep only canonical visit types for ENIGMA export: screening and 12-month follow-up
+if 'redcap_event_name' in combined_enigma.columns:
+    _keep_events = ['screening_visit_arm_1', '12_month_follow_up_arm_1']
+    _before_count = len(combined_enigma)
+    combined_enigma = combined_enigma.loc[combined_enigma['redcap_event_name'].isin(_keep_events)].copy()
+    print(f"Filtered ENIGMA rows: kept {len(combined_enigma)} of {_before_count} rows (screening and 12-month follow-up).")
+combined_enigma.to_csv(home / 'Box' / 'Black_Lab' / 'projects' / 'TS' / 'New_Tics_R01' / 'Data' / 'analysis' / 'DS' / 'r01_combine' / f'NT_r01_combine_for_ENIGMA_{current_date}.csv', index=False)
