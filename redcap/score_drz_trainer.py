@@ -39,7 +39,8 @@ def score_drz_trainer(directory):
                             entry = {'demo_study_id': subject.upper(), 'event_name': event_name, "session": session_count, "condition": condition, "tics": tics, "rewards": rewards, "duration": duration,
                                     "file": join(directory, file)}
                             session_count += 1
-                            df = df.append(entry, ignore_index=True)
+                            # DataFrame.append is deprecated; use pd.concat with a one-row DataFrame
+                            df = pd.concat([df, pd.DataFrame([entry])], ignore_index=True)
     df.sort_values(by=['demo_study_id', 'event_name', 'session']).reset_index(drop=True)
     df.to_csv('drz_output_with_trainer.csv')
 
