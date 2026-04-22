@@ -698,24 +698,24 @@ for x in combined.index.values:
 for i in combined.index.values:
     if pd.isna(combined.loc[i, 'drz_tics_bf_bselne']) == False:
         tics_before_baseline = (str(combined.loc[i, 'drz_tics_bf_bselne']).count('  ')+1)
-        print('\n tics_before_baseline=',combined.loc[i, 'demo_study_id'], tics_before_baseline)
+        # print('\n tics_before_baseline=',combined.loc[i, 'demo_study_id'], tics_before_baseline)
     else:
         tics_before_baseline = 0
-        print('\n tics_before_baseline=',combined.loc[i, 'demo_study_id'], tics_before_baseline)
+        # print('\n tics_before_baseline=',combined.loc[i, 'demo_study_id'], tics_before_baseline)
     if pd.isna(combined.loc[i, 'drz_tics_1st_bselne']) == False:
         tics_at_baseline = (str(combined.loc[i, 'drz_tics_1st_bselne']).count('  ')+1)
-        print('drz_tics_1st_bselne=',combined.loc[i, 'demo_study_id'], tics_at_baseline)
+        # print('drz_tics_1st_bselne=',combined.loc[i, 'demo_study_id'], tics_at_baseline)
     else:
         tics_at_baseline = 0
-        print('drz_tics_1st_bselne=',combined.loc[i, 'demo_study_id'], tics_at_baseline)
+        # print('drz_tics_1st_bselne=',combined.loc[i, 'demo_study_id'], tics_at_baseline)
     if pd.isna(combined.loc[i, 'drz_tics_aftr_1st_bselne']) == False:
         tics_after_baseline = (str(combined.loc[i, 'drz_tics_aftr_1st_bselne']).count('  ')+1)
-        print('drz_tics_aftr_1st_bselne=',combined.loc[i, 'demo_study_id'], tics_after_baseline)
-        print('TOTAL=',combined.loc[i, 'demo_study_id'], tics_after_baseline+tics_at_baseline+tics_before_baseline)
+        # print('drz_tics_aftr_1st_bselne=',combined.loc[i, 'demo_study_id'], tics_after_baseline)
+        # print('TOTAL=',combined.loc[i, 'demo_study_id'], tics_after_baseline+tics_at_baseline+tics_before_baseline)
     else:
         tics_after_baseline = 0
-        print('drz_tics_aftr_1st_bselne=',combined.loc[i, 'demo_study_id'], tics_after_baseline)
-        print('TOTAL=',combined.loc[i, 'demo_study_id'], tics_after_baseline+tics_at_baseline+tics_before_baseline)
+        # print('drz_tics_aftr_1st_bselne=',combined.loc[i, 'demo_study_id'], tics_after_baseline)
+        # print('TOTAL=',combined.loc[i, 'demo_study_id'], tics_after_baseline+tics_at_baseline+tics_before_baseline)
         # before bsline =1 
     combined.loc[i, 'before_baseline_tics'] = tics_before_baseline+tics_at_baseline+tics_after_baseline
     combined.loc[i, 'after_baseline_tics'] = tics_before_baseline+tics_at_baseline+tics_after_baseline
