@@ -174,6 +174,12 @@ r01.insert(loc=0, column='database', value=1)
 ### combine NT and NTR01 REDCap data
 combined = pd.concat([nt, r01], axis=0).sort_values(by=['demo_study_id']).reset_index(drop=True)
 
+# Drop any rows created for test/demo subjects whose study ID starts with 'test'
+if 'demo_study_id' in combined.columns:
+    test_mask = combined['demo_study_id'].astype(str).str.lower().str.startswith('test')
+    if test_mask.any():
+        combined = combined.loc[~test_mask].reset_index(drop=True)
+
 # rename redcap event names to match
 combined['redcap_event_name'] = combined['redcap_event_name'].str.replace("one_year_followup_arm_1", "12_month_follow_up_arm_1")
 combined['redcap_event_name'] = combined['redcap_event_name'].str.replace("initial_screen_arm_1", "screening_visit_arm_1")
